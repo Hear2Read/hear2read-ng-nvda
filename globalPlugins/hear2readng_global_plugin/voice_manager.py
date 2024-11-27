@@ -41,7 +41,7 @@ H2RNG_VOICE_LIST_URL = "https://hear2read.org/nvda-addon/getH2RNGVoiceNames.php"
 
 
 class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
-    def __init__(self, parent=gui.mainFrame, title="Hear2ReadNG voice manager"):
+    def __init__(self, parent=gui.mainFrame, title="Hear2Read Indic Voice Manager"):
         """Constructor for the main window of the voice download manager. 
         Performs installation checks and initializes class attributes. Also 
         populates the list of voices to be displayed in the manager.

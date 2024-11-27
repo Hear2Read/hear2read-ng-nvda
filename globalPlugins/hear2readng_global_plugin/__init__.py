@@ -31,8 +31,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             4,
             wx.ID_ANY,
             # Translators: label of a menu item
-            _("Hear2Read Indic &voice manager..."),
-            # Translators: Hear2ReadNG's voice manager menu item help
+            _("Hear2Read Indic Voice Manager..."),
+            # Translators: Hear2Read Indic's voice manager menu item help
             _("Open the voice manager to download Hear2Read Indic voices"),
         )
         gui.mainFrame.sysTrayIcon.menu.Bind(wx.EVT_MENU, self.on_manager, self.itemHandle)
@@ -54,11 +54,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             if wx.YES == gui.messageBox(
                 # Translators: message telling the user that no voice is installed
                 _(
-                    "No Indic Hear2ReadNG voice was found.\n"
+                    "No Indic Hear2Read voice was found.\n"
                     "You can download Indic voices from the voice manager.\n"
                     "Do you want to open the voice manager now?"
                 ),
-                # Translators: title of a message telling the user that no Hear2ReadNG voice was found
+                # Translators: title of a message telling the user that no Hear2Read Indic voice was found
                 _("Hear2Read Indic Voices"),
                 wx.YES_NO | wx.ICON_WARNING,):
 
