@@ -1,4 +1,4 @@
-# A part of the Hear2Read NG voices addon for NVDA
+# A part of the Hear2Read Indic Voices addon for NVDA
 # Copyright (C) 2013-2024, Hear2Read Project Contributors
 # See the file COPYING for more details.
 
@@ -40,7 +40,7 @@ def move_old_voices():
                     shutil.copy2(src=src_path, dst=dst_path)
                 os.remove(src_path)
             except Exception as e:
-                log.warn(f"Hear2Read NG unable to remove old voice file: "
+                log.warn(f"Hear2Read Indic unable to remove old voice file: "
                          f"{file}, Exception: {e}")
         
         old_wavs_dir = os.path.join(OLD_H2RNG_DATA_DIR, "wavs")
@@ -50,7 +50,7 @@ def move_old_voices():
                 shutil.copytree(src=old_wavs_dir, dst=H2RNG_WAVS_DIR, 
                                 dirs_exist_ok=True)
             except Exception as e:
-                log.warn(f"Hear2Read NG unable to copy old wav folders: {e}")
+                log.warn(f"Hear2Read Indic unable to copy old wav folders: {e}")
 
         # try deleting old data
         old_dirs = []
@@ -63,13 +63,13 @@ def move_old_voices():
                 if os.path.isdir(dir):
                     shutil.rmtree(dir)
             except Exception as e:
-                log.warn(f"Hear2Read NG unable to remove old folder: {dir}, "
+                log.warn(f"Hear2Read Indic unable to remove old folder: {dir}, "
                          f"Exception: {e}")
 
         try:
             shutil.rmtree(OLD_H2RNG_DATA_DIR)
         except Exception as e:
-            log.warn("Hear2Read NG unable to remove old Hear2Read data folder: "
+            log.warn("Hear2Read Indic unable to remove old Hear2Read data folder: "
                      f"{e}")
                 
 def onInstall():
@@ -79,7 +79,7 @@ def onInstall():
     src_dir = os.path.join(_dir, "res")
     dll_name = "Hear2ReadNG_addon_engine.dll"
 
-    # First check that the dll file is not in access, i.e., Hear2Read NG is not
+    # First check that the dll file is not in access, i.e., Hear2Read Indic is not
     # the current TTS synth
     if os.path.isdir(H2RNG_DATA_DIR):
         try:
@@ -96,11 +96,11 @@ def onInstall():
         except Exception as e:
             if "Hear2ReadNG_addon_engine.dll" in str(e):
                 gui.messageBox(
-                    # Translators: message telling the user that Hear2Read NG was not installed correctly
-                    _("Unable to update Hear2Read NG while it is running in NVDA\n"
+                    # Translators: message telling the user that Hear2Read Indic was not installed correctly
+                    _("Unable to update Hear2Read Indic while it is running in NVDA\n"
                         "Please switch to a different synthesizer, restart NVDA and retry"),
-                    # Translators: title of a message telling the user that Hear2Read NG was not installed correctly
-                    _("Hear2Read NG Install Error"),
+                    # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
+                    _("Hear2Read Indic Install Error"),
                     wx.OK | wx.ICON_ERROR)
                 raise e
             else:
@@ -110,14 +110,14 @@ def onInstall():
         shutil.copytree(src=src_dir, dst=H2RNG_DATA_DIR, dirs_exist_ok=True)
         shutil.rmtree(src_dir)
     except Exception as e:
-        log.warn(f"Error installing Hear2Read NG data files: {e}")
+        log.warn(f"Error installing Hear2Read Indic data files: {e}")
         if "Hear2ReadNG_addon_engine.dll" in str(e):
             gui.messageBox(
-                # Translators: message telling the user that Hear2Read NG was not installed correctly
-                _("Unable to update Hear2Read NG while it is running in NVDA\n"
+                # Translators: message telling the user that Hear2Read Indic was not installed correctly
+                _("Unable to update Hear2Read Indic while it is running in NVDA\n"
                     "Please switch to a different synthesizer, restart NVDA and retry"),
-                # Translators: title of a message telling the user that Hear2Read NG was not installed correctly
-                _("Hear2Read NG Install Error"),
+                # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
+                _("Hear2Read Indic Install Error"),
                 wx.OK | wx.ICON_ERROR)
             raise e
 
@@ -127,14 +127,14 @@ def onInstall():
             try:
                 os.remove(os.path.join(src_voice_dir, file))
             except Exception as e:
-                log.warn(f"Hear2Read NG unable to remove file from addon dir: "
+                log.warn(f"Hear2Read Indic unable to remove file from addon dir: "
                          f"{file}, Exception: {e}")
 
     move_old_voices()
 
 def onUninstall():
     try:
-        log.info("Hear2Read NG uninstalling...")
+        log.info("Hear2Read Indic uninstalling...")
         if os.path.isfile(H2RNG_UPDATE_FLAG):
             # remove the update flag file so uninstall has the desired effect
             # subsequently
@@ -143,4 +143,4 @@ def onUninstall():
             return
         shutil.rmtree(H2RNG_DATA_DIR)
     except Exception as e:
-        log.warn(f"Error removing Hear2Read NG files on uninstall: {e}")
+        log.warn(f"Error removing Hear2Read Indic files on uninstall: {e}")

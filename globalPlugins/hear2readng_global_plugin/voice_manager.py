@@ -1,4 +1,4 @@
-# A part of the Hear2Read NG voices addon for NVDA
+# A part of the Hear2Read Indic Voices addon for NVDA
 # Copyright (C) 2013-2024, Hear2Read Project Contributors
 # See the file COPYING for more details.
 
@@ -60,11 +60,11 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
             # Warn user and exit in case installing data failed
             if not install_success:
                 gui.messageBox(
-                    # Translators: message telling the user that Hear2Read NG was not installed correctly
-                    _("Hear2Read NG addon not installed properly.\n"
+                    # Translators: message telling the user that Hear2Read Indic was not installed correctly
+                    _("Hear2Read Indic addon not installed properly.\n"
                       "Please reinstall the addon from the file and retry.\n"),
-                    # Translators: title of a message telling the user that Hear2Read NG was not installed correctly
-                    _("Hear2Read NG Error"),
+                    # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
+                    _("Hear2Read Indic Error"),
                     wx.OK | wx.ICON_ERROR,)
                 self.Destroy()
                 return
@@ -108,11 +108,11 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         if not self.display_voices:
             gui.messageBox(
                 # Translators: message telling the user that no voices are installed and no internet connection
-                _("No Hear2Read NG voices installed and \n"
+                _("No Hear2Read Indic voices installed and \n"
                   "unable to connect to the internet \n"
                   "Please check internet connection and retry "),
-                # Translators: title of a message telling the user that Hear2Read NG was not installed correctly
-                _("Hear2Read NG No Voices"),
+                # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
+                _("Hear2Read Indic No Voices"),
                 wx.OK | wx.ICON_ERROR,)
             self.Destroy()
             return
@@ -298,7 +298,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         # TODO: this is not a breaking change, check if necessary
         curr_synth = synthDriverHandler.getSynth()
 
-        if ("Hear2Read NG" in curr_synth.name and 
+        if ("Hear2Read Indic" in curr_synth.name and 
             (curr_synth.voice == voice.id)):
             gui.messageBox(
                 # Translators: message in a message box

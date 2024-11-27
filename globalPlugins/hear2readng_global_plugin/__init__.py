@@ -3,7 +3,7 @@
 # Copyright (c) 2023 Musharraf Omer
 # This file is covered by the GNU General Public License.
 
-# A part of the Hear2Read NG voices addon for NVDA
+# A part of the Hear2Read Indic Voices addon for NVDA
 # Copyright (C) 2013-2024, Hear2Read Project Contributors
 # See the file COPYING for more details.
 
@@ -31,9 +31,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             4,
             wx.ID_ANY,
             # Translators: label of a menu item
-            _("Hear2Read NG &voice manager..."),
+            _("Hear2Read Indic &voice manager..."),
             # Translators: Hear2ReadNG's voice manager menu item help
-            _("Open the voice manager to download Hear2Read NG voices"),
+            _("Open the voice manager to download Hear2Read Indic voices"),
         )
         gui.mainFrame.sysTrayIcon.menu.Bind(wx.EVT_MENU, self.on_manager, self.itemHandle)
 
@@ -59,7 +59,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                     "Do you want to open the voice manager now?"
                 ),
                 # Translators: title of a message telling the user that no Hear2ReadNG voice was found
-                _("Hear2Read NG Voices"),
+                _("Hear2Read Indic Voices"),
                 wx.YES_NO | wx.ICON_WARNING,):
 
                 self.on_manager(None)

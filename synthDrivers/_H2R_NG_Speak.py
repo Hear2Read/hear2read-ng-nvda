@@ -1,5 +1,5 @@
 # -*- coding: UTF-8 -*-
-# A part of the Hear2Read NG voices addon for NVDA
+# A part of the Hear2Read Indic Voices addon for NVDA
 # Copyright (C) 2013-2024, Hear2Read Project Contributors
 # See the file COPYING for more details.
 
@@ -504,10 +504,10 @@ def _checkIfUpdates():
     
     if show_update:
         gui.messageBox(
-                _("Update available for Hear2Read NG synthesiser\n" +
-                    "Open the Hear2Read NG Voice Manager app to update"),
+                _("Update available for Hear2Read Indic synthesiser\n" +
+                    "Open the Hear2Read Indic Voice Manager app to update"),
                 # Translators: The title of a dialog presented when an error occurs.
-                _("Hear2Read NG Update!"),
+                _("Hear2Read Indic Update!"),
                 wx.OK | wx.ICON_WARNING
             )
   

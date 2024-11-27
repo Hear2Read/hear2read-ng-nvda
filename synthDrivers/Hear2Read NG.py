@@ -1,9 +1,8 @@
 # -*- coding: UTF-8 -*-
 #synthDrivers/Hear2Read NG.py
-#A part of NonVisual Desktop Access (NVDA)
-#Copyright (C) 2007-2019 NV Access Limited, Peter Vágner, Aleksey Sadovoy, Leonard de Ruijter
-#This file is covered by the GNU General Public License.
-#See the file COPYING for more details.
+# A part of the Hear2Read Indic Voices addon for NVDA
+# Copyright (C) 2013-2024, Hear2Read Project Contributors
+# See the file COPYING for more details.
 
 from collections import OrderedDict
 
@@ -76,12 +75,12 @@ class SynthDriver(SynthDriver):
     @classmethod
     def check(cls):
         if not check_files():
-            raise FileNotFoundError("Hear2Read NG files not found!")
+            raise FileNotFoundError("Hear2Read Indic files not found!")
             return False
             # try:
                 # install_tasks()
             # except Exception as e:
-                # log.error(f"Hear2Read NG install tasks on check synth failed: {e}")
+                # log.error(f"Hear2Read Indic install tasks on check synth failed: {e}")
             # finally:
                 # return check_files()
         return True

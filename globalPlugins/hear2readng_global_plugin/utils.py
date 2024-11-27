@@ -1,4 +1,4 @@
-# A part of the Hear2Read NG voices addon for NVDA
+# A part of the Hear2Read Indic Voices addon for NVDA
 # Copyright (C) 2013-2024, Hear2Read Project Contributors
 # See the file COPYING for more details.
 
@@ -33,7 +33,7 @@ OLD_H2RNG_DATA_DIR = os.path.join(os.environ['ALLUSERSPROFILE'],
 
 def check_files():
     """
-    Checks whether the files and directories vital to Hear2Read NG are 
+    Checks whether the files and directories vital to Hear2Read Indic are 
     present
 
     @return: returns True only if the engine DLL, the phoneme data dir
@@ -57,7 +57,7 @@ def check_files():
                                                 f"{eng_model_file}.json"):
             eng_voice_is_present = True
     except Exception as e:
-        log.warn(f"Hear2Read NG check failed with exception: {e}")
+        log.warn(f"Hear2Read Indic check failed with exception: {e}")
             
     return dll_is_present and phonedir_is_present and eng_voice_is_present
 
@@ -86,7 +86,7 @@ def move_old_voices():
                     voices_moved = True
                 os.remove(src_path)
             except Exception as e:
-                log.warn("Hear2Read NG unable to remove old voice file: "
+                log.warn("Hear2Read Indic unable to remove old voice file: "
                          f"{file}")
         
         old_wavs_dir = os.path.join(OLD_H2RNG_DATA_DIR, "wavs")
@@ -96,7 +96,7 @@ def move_old_voices():
                 shutil.copytree(src=old_wavs_dir, dst=H2RNG_WAVS_DIR, 
                                 dirs_exist_ok=True)
             except Exception as e:
-                log.warn("Hear2Read NG unable to copy old wav folders")
+                log.warn("Hear2Read Indic unable to copy old wav folders")
 
         # try deleting old data
         old_dirs = []
@@ -110,12 +110,12 @@ def move_old_voices():
                     shutil.rmtree(dir)
             except Exception as e:
                 dirname = os.path.basename(dir)
-                log.warn(f"Hear2Read NG unable to remove old folder: {dirname}")
+                log.warn(f"Hear2Read Indic unable to remove old folder: {dirname}")
 
         try:
             shutil.rmtree(OLD_H2RNG_DATA_DIR)
         except Exception as e:
-            log.warn("Hear2Read NG unable to remove old Hear2Read data folder")
+            log.warn("Hear2Read Indic unable to remove old Hear2Read data folder")
             
     return voices_moved
 
@@ -137,15 +137,15 @@ def onInstall():
         shutil.copytree(src=src_dir, dst=H2RNG_DATA_DIR, dirs_exist_ok=True)
         shutil.rmtree(src_dir)
     except Exception as e:
-        log.warn(f"Error installing Hear2Read NG data files: {e}")
+        log.warn(f"Error installing Hear2Read Indic data files: {e}")
         if "Hear2ReadNG_addon_engine.dll" in str(e):
             gui.messageBox(
-                # Translators: message telling the user that Hear2Read NG was not installed correctly
-                _("Unable to update Hear2Read NG while it is running in NVDA\n"
+                # Translators: message telling the user that Hear2Read Indic was not installed correctly
+                _("Unable to update Hear2Read Indic while it is running in NVDA\n"
                     "Please switch to a different synthesizer, restart NVDA "
                     "and retry"),
-                # Translators: title of a message telling the user that Hear2Read NG was not installed correctly
-                _("Hear2Read NG Install Error"),
+                # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
+                _("Hear2Read Indic Install Error"),
                 wx.OK | wx.ICON_ERROR)
             raise e
 
@@ -155,7 +155,7 @@ def onInstall():
             try:
                 os.remove(os.path.join(src_voice_dir, file))
             except Exception as e:
-                log.warn(f"Hear2Read NG unable to remove file from addon dir: "
+                log.warn(f"Hear2Read Indic unable to remove file from addon dir: "
                          f"{file}, Exception: {e}")
 
     return move_old_voices()
