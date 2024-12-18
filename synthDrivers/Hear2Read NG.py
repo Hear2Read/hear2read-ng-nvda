@@ -24,6 +24,7 @@ from speech.types import SpeechSequence
 from synthDriverHandler import (
     SynthDriver,
     VoiceInfo,
+    getSynthInstance,
     synthDoneSpeaking,
     synthIndexReached,
 )
@@ -90,6 +91,7 @@ class SynthDriver(SynthDriver):
             return
         # log.info("H2R NG: init started")
         _H2R_NG_Speak.initialize(self._onIndexReached)
+        self.eng_synth = getSynthInstance("oneCore")
         self.__voices = _H2R_NG_Speak.populateVoices()
         self._variant="0"
         log.info("H2R NG: init done")
@@ -121,10 +123,19 @@ class SynthDriver(SynthDriver):
 
     def speak(self, speechSequence: SpeechSequence):
         charMode = False
+        isASCII = True
+        #TODO have multiple speech sequences and register on synthIndexReached
+        # to alternate ascii and non ascii sub sequences
+        # self.sequences = {}
         textSSML = []
-        
+        # log.info(f"speech sequence: {speechSequence}")
         for item in speechSequence:
             if isinstance(item,str):
+                if isASCII and not item.isascii():
+                    # log.info(f"detected first nonascii: {item}")
+                    isASCII = False
+                    # self.eng_synth.speak(speechSequence)
+                    # return
                 textSSML.append(self._processText(item))
             elif isinstance(item, IndexCommand):
                 textSSML.append("<mark " + str(item.index) + ">")
@@ -141,6 +152,10 @@ class SynthDriver(SynthDriver):
             else:
                 log.error("Unknown speech: %s"%item)
                 
+        if isASCII:
+            self.eng_synth.speak(speechSequence)
+            return
+        
         textmarked=u"".join(textSSML)           
         if (textmarked != ""):
             params = _H2R_NG_Speak.SpeechParams(piperPhoneLen, amplitude, charMode)
@@ -148,9 +163,11 @@ class SynthDriver(SynthDriver):
 
     def cancel(self):
         _H2R_NG_Speak.stop()
+        self.eng_synth.cancel()
 
     def pause(self,switch):
         _H2R_NG_Speak.pause(switch)
+        self.eng_synth.pause(switch)
 
     def _get_rate(self):
         return (nvdaRate)
@@ -209,6 +226,7 @@ class SynthDriver(SynthDriver):
 
     def terminate(self):
         _H2R_NG_Speak.terminate()
+        self.eng_synth.terminate()
 
     def _get_variant(self):
         return self._variant
