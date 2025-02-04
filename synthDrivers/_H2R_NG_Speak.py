@@ -6,6 +6,7 @@
 import os
 import queue
 import threading
+from collections import OrderedDict
 from ctypes import (
     CFUNCTYPE,
     POINTER,
@@ -25,6 +26,7 @@ import gui
 import nvwave
 import wx
 from logHandler import log
+from synthDriverHandler import changeVoice, getSynthInstance
 
 isSpeaking = False
 onIndexReached = None
@@ -54,6 +56,7 @@ en_voice_amy = "en_US-amy-low"
 EN_VOICE_ALOK = "en_US-arctic-medium"
 en_voice = EN_VOICE_ALOK
 en_qual = "med"
+eng_synth = "oneCore"
 
 ALOK_ID = 13
 DIPAL_ID = 2
@@ -69,6 +72,7 @@ lang_names = {"as":"Assamese",
                 "ne":"Nepali", 
                 "or":"Odia", 
                 "pa":"Punjabi", 
+                "si":"Sinhala",
                 "ta":"Tamil", 
                 "te":"Telugu", 
                 "en":"English"}
@@ -330,9 +334,14 @@ def stop():
     player.stop()
     en_player.stop()
 
+    if EngSynth:
+        EngSynth.cancel()
+
 def pause(switch):    
     player.pause(switch)
     en_player.pause(switch)
+    if EngSynth:
+        EngSynth.pause(switch)
 
 def populateVoices():
     pathName = os.path.join(H2RNG_DATA_DIR, "Voices")
@@ -364,8 +373,8 @@ def _setVoiceByIdentifier(voiceID=None):
     global player
     
     v=getCurrentVoice()
-    
-    voice_attrs = voiceID.split("-")
+    if voiceID:
+        voice_attrs = voiceID.split("-")
     
     if not voiceID or not v or voice_attrs[0].split("_")[0] == "en":
         H2RNG_SpeakDLL.H2R_Speak_setEngVoiceMain()
@@ -418,7 +427,7 @@ def _setVoiceByIdentifier(voiceID=None):
 def setVoiceByIdentifier(voiceID=None):
     _execWhenDone(_setVoiceByIdentifier, voiceID=voiceID, mustBeAsync=True)
 
-#TODO there is literally no use other than setting to eng
+#TODO there is no use other than setting to eng
 def setVoiceByLanguage(lang):
     
     global curr_voice, player
@@ -485,7 +494,137 @@ def init_eng_voice():
         en_player = nvwave.WavePlayer(channels=1, samplesPerSec=16000, bitsPerSample=16, outputDevice=config.conf["speech"]["outputDevice"], buffered=True)
         en_voice = en_voice_amy
         en_qual = "low"
+
+def init_eng_synth(default_synth="oneCore"):
+
+    eng_synth = config.conf.get("hear2read", {}).get("engSynth", default_synth)
+    eng_voice = config.conf.get("hear2read", {}).get("engVoice", "")
+
+    log.info(f"init_eng_synth: got synth and voice from config: {eng_synth}, {eng_voice}")
+
+    set_eng_synth(eng_synth=eng_synth)
+    if eng_voice and eng_voice in get_eng_synth_voicelist().keys():
+        set_eng_voice(eng_voice)
+
+    set_eng_synth_rate(config.conf["hear2read"]["engRate"])
+    set_eng_synth_pitch(config.conf["hear2read"]["engPitch"])
+    set_eng_synth_volume(config.conf["hear2read"]["engVolume"])
+    set_eng_synth_inflection(config.conf["hear2read"]["engInflection"])
+
+
+
+
+def set_eng_synth(eng_synth):
+    global EngSynth, EngVoices
     
+    try:
+        if EngSynth:
+            EngSynth.cancel()
+            EngSynth.terminate()
+            del EngSynth
+    except NameError as e:
+        log.info("EngSynth not defined. Ignoring")
+        pass
+
+    # eng_synth = config.conf.get("hear2read", {}).get("engSynth", eng_synth)
+    # eng_voice = config.conf.get("hear2read", {}).get("engVoice", "")
+
+    EngSynth = getSynthInstance(eng_synth)
+    EngVoices = EngSynth._get_availableVoices()
+    
+    # if eng_voice not in EngVoices.keys():
+    for voice in EngVoices.values():
+        # log.info(f"onecore voice: {voice.displayName}, id: {voice.id}")
+        # Hardcoding the voice as well for now
+        if ((voice.language and voice.language.startswith("en")) 
+                or (not voice.language 
+                    and "english" in voice.displayName.lower())):
+            eng_voice = voice.id
+            break
+    
+    EngSynth._set_voice(eng_voice)
+    # config.conf["hear2read"]["engSynth"] = EngSynth.name
+    # config.conf["hear2read"]["engVoice"] = EngSynth.voice
+    return True
+
+def get_eng_voice():
+    return EngSynth.voice
+
+def set_eng_voice(voice_id):
+    if voice_id not in get_eng_synth_voicelist().keys():
+        log.warn(f"English voice {voice_id} not found in synthesizer, skipping")
+    log.info(f"set_eng_voice: {voice_id}")
+    EngSynth._set_voice(voice_id)
+
+    log.info(f"voice changed to: {get_eng_voice()}")
+    if get_eng_voice() != voice_id:
+        log.info("failed changing the voice. trying change_voice")
+        changeVoice(EngSynth, voice_id)
+        log.info(f"2nd attempt voice changed to: {get_eng_voice()}")
+
+    # config.conf["hear2read"]["engVoice"] = EngSynth.voice
+
+def get_eng_synth_rate():
+    return EngSynth._get_rate()
+
+def set_eng_synth_rate(rate):
+    EngSynth._set_rate(rate)
+
+def get_eng_synth_pitch():
+    return EngSynth._get_pitch()
+
+def set_eng_synth_pitch(pitch):
+    EngSynth._set_pitch(pitch)
+
+def get_eng_synth_volume():
+    return EngSynth._get_volume()
+
+def set_eng_synth_volume(volume):
+    EngSynth._set_volume(volume)
+
+def get_eng_synth_inflection():
+    return EngSynth._get_inflection()
+
+def set_eng_synth_inflection(inflection):
+    EngSynth._set_inflection(inflection)
+
+def get_eng_synth_name():
+    if EngSynth:
+        return EngSynth.name
+    else:
+        return ""
+
+def get_eng_synth_desc():
+    if EngSynth:
+        return EngSynth.description
+    else:
+        return ""
+    
+def get_eng_synth():
+    try:
+        return EngSynth if EngSynth else None
+    except NameError as e:
+        return None
+    
+def get_eng_synth_voicelist():
+    try:
+       all_voices = EngSynth._get_availableVoices()
+    #    log.info(f"got all voices: {all_voices}")
+    except Exception as e:
+        log.warn(f"get_eng_synth_voicelist: Unable to list voices from \"{EngSynth.name}\"")
+        return OrderedDict()
+    return  OrderedDict(
+            (id, voice_info)
+            for id, voice_info in all_voices.items()
+            if ((voice_info.language and voice_info.language.startswith("en")) 
+                or (not voice_info.language 
+                    and "english" in voice_info.displayName.lower()))
+        )
+    
+def speak_eng(speech_sequence):
+    # TODO throw exception if not?
+    if EngSynth:
+        EngSynth.speak(speech_sequence)
     
 # TODO remove deprecated?
 def _checkIfUpdates():
@@ -530,7 +669,7 @@ def initialize(idxCallback=None):
         It is called with one argument:
         the number of the index or C{None} when speech stops.
     """
-    global H2RNG_SpeakDLL, bgThread, bgQueue, player, onIndexReached#, i, libc
+    global H2RNG_SpeakDLL, EngSynth, bgThread, bgQueue, player, onIndexReached#, i, libc
     
     H2RNG_SpeakDLL = cdll.LoadLibrary(H2RNG_ENGINE_DLL_PATH)
 
@@ -559,9 +698,11 @@ def initialize(idxCallback=None):
     bgThread=BgThread()
     bgThread.start()
 
+    init_eng_synth()
+
 
 def terminate():
-    global bgThread, bgQueue, player, en_player, H2RNG_SpeakDLL , onIndexReached
+    global bgThread, bgQueue, player, en_player, H2RNG_SpeakDLL , onIndexReached, EngSynth
     stop()
     bgQueue.put((None, None, None))
     bgThread.join()
@@ -575,6 +716,10 @@ def terminate():
     # H2RNG_SpeakDLL=None
     del H2RNG_SpeakDLL
     onIndexReached = None
+    if EngSynth:
+        EngSynth.cancel()
+        EngSynth.terminate()
+        del EngSynth
 
 def info():
     # Python 3.8: a path string must be specified, a NULL is fine when what we need is version string.
