@@ -6,9 +6,13 @@ from typing import Any
 import config
 import gui
 import wx
-from autoSettingsUtils.driverSetting import NumericDriverSetting
+from autoSettingsUtils.driverSetting import DriverSetting, NumericDriverSetting
 from gui import SettingsDialog, guiHelper, nvdaControls
-from gui.settingsDialogs import DriverSettingChanger, SettingsPanel
+from gui.settingsDialogs import (
+    DriverSettingChanger,
+    SettingsPanel,
+    StringDriverSettingChanger,
+)
 from logHandler import log
 from synthDriverHandler import getSynthInstance, getSynthList
 from wx.lib.expando import ExpandoTextCtrl
@@ -22,12 +26,14 @@ from synthDrivers._H2R_NG_Speak import (
     get_eng_synth_rate,
     get_eng_synth_voicelist,
     get_eng_synth_volume,
+    get_eng_variant,
     get_eng_voice,
     set_eng_synth,
     set_eng_synth_inflection,
     set_eng_synth_pitch,
     set_eng_synth_rate,
     set_eng_synth_volume,
+    set_eng_variant,
     set_eng_voice,
 )
 
@@ -260,9 +266,10 @@ class VoiceSettingsPanel(SettingsPanel):
     helpId = "SpeechSettings"
     synth = None
 
-    def __init__(self, *args, **kwargs):
-        super(VoiceSettingsPanel, self).__init__(*args, **kwargs)
-        #TODO rewrite
+    # def __init__(self, *args, **kwargs):
+    def __init__(self, parent: wx.Window):
+        # super(VoiceSettingsPanel, self).__init__(*args, **kwargs)
+        # TODO: remove?
         # because settings instances can be of type L{Driver} as well, we have to handle
         # showing settings for non-instances. Because of this, we must reacquire a reference
         # to the settings class whenever we wish to use it (via L{getSettings}) in case the instance changes.
@@ -271,6 +278,7 @@ class VoiceSettingsPanel(SettingsPanel):
             get_eng_synth(),
             lambda ref: wx.CallAfter(self.refreshGui)
         )
+        super().__init__(parent)
 
     def makeSettings(self, settingsSizer):
         # Construct synthesizer settings
@@ -316,6 +324,15 @@ class VoiceSettingsPanel(SettingsPanel):
 
         self.lastControl = self.voiceList
 
+        id = "variant"
+        if id in settingsDict.keys():
+            s = self._makeStringSettingControl(settingsDict[id],
+                                               get_eng_synth())
+            self.settingsSizer.Add(
+                s,
+                border = 10
+            )
+
         for id in sliderSettings:
             if id in settingsDict.keys():
                 s = self._makeSliderSettingControl(settingsDict[id], 
@@ -328,6 +345,7 @@ class VoiceSettingsPanel(SettingsPanel):
                 )
 
         self.settingsSizer.Layout()
+        # settingsSizer.Layout()
 
     def _makeSliderSettingControl(
             self,
@@ -363,6 +381,62 @@ class VoiceSettingsPanel(SettingsPanel):
         self.lastControl=lSlider
         return labeledControl.sizer
 
+    def _makeStringSettingControl(
+            self,
+            setting: DriverSetting,
+            settingsStorage: Any
+    ):
+        """
+        Same as L{_makeSliderSettingControl} but for string settings displayed in a wx.Choice control
+        Options for the choice control come from the availableXstringvalues property
+        (Dict[id, StringParameterInfo]) on the instance returned by self.getSettings()
+        The id of the value is stored on settingsStorage.
+        Returns sizer with label and combobox.
+        """
+        labelText = f"{setting.displayNameWithAccelerator}:"
+        stringSettingAttribName = f"_{setting.id}s"
+        setattr(
+            self,
+            stringSettingAttribName,
+            # Settings are stored as an ordered dict.
+            # Therefore wrap this inside a list call.
+            list(getattr(
+                # self.getSettings(),
+                get_eng_synth(),
+                f"available{setting.id.capitalize()}s"
+            ).values())
+        )
+        stringSettings = getattr(self, stringSettingAttribName)
+        labeledControl = guiHelper.LabeledControlHelper(
+            self,
+            labelText,
+            wx.Choice,
+            choices=[x.displayName for x in stringSettings]
+        )
+        lCombo = labeledControl.control
+        setattr(self, f"{setting.id}List", lCombo)
+        # self.bindHelpEvent(
+        #     self._getSettingControlHelpId(setting.id),
+        #     lCombo
+        # )
+
+        try:
+            cur = getattr(settingsStorage, setting.id)
+            selectionIndex = [
+                x.id for x in stringSettings
+            ].index(cur)
+            lCombo.SetSelection(selectionIndex)
+        except ValueError:
+            pass
+        lCombo.Bind(
+            wx.EVT_CHOICE,
+            StringDriverSettingChanger(settingsStorage, setting, self)
+        )
+        if self.lastControl:
+            lCombo.MoveAfterInTabOrder(self.lastControl)
+        self.lastControl = lCombo
+        return labeledControl.sizer
+
     def onEngVoiceChange(self, event):
         # log.info(f"setting voice {self.voiceList.GetString(self.voiceList.GetSelection())}")
         set_eng_voice(self.eng_voice_ids[self.voiceList.GetSelection()])
@@ -392,10 +466,13 @@ class VoiceSettingsPanel(SettingsPanel):
         if config.conf["hear2read"]["engSynth"] != get_eng_synth_name():
             set_eng_synth(config.conf["hear2read"]["engSynth"])
         conf_eng_voice = config.conf["hear2read"]["engVoice"]
+        conf_eng_variant = config.conf["hear2read"]["engVariant"]
         # need to make sure that the English voice exists in config as default
         # value is an empty string
         if conf_eng_voice and conf_eng_voice != get_eng_voice():
             set_eng_voice(config.conf["hear2read"]["engVoice"])
+        if conf_eng_variant and conf_eng_variant != get_eng_variant():
+            set_eng_variant(config.conf["hear2read"]["engVariant"])
         if config.conf["hear2read"]["engRate"] != get_eng_synth_rate():
             set_eng_synth_rate(config.conf["hear2read"]["engRate"])
         if config.conf["hear2read"]["engPitch"] != get_eng_synth_pitch():
@@ -409,6 +486,7 @@ class VoiceSettingsPanel(SettingsPanel):
         # log.info("onSave")
         config.conf["hear2read"]["engSynth"] = get_eng_synth_name()
         config.conf["hear2read"]["engVoice"] = get_eng_voice()
+        config.conf["hear2read"]["engVariant"] = get_eng_variant()
         config.conf["hear2read"]["engRate"] = get_eng_synth_rate()
         config.conf["hear2read"]["engPitch"] = get_eng_synth_pitch()
         config.conf["hear2read"]["engVolume"] = get_eng_synth_volume()

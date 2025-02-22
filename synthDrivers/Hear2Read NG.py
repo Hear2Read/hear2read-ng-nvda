@@ -116,6 +116,7 @@ class SynthDriver(SynthDriver):
         confspec = {
             "engSynth": "string(default='oneCore')",
             "engVoice": "string(default='')",
+            "engVariant": "string(default='')",
             "engRate": "integer(default=50)",
             "engPitch": "integer(default=50)",
             "engVolume": "integer(default=100)",

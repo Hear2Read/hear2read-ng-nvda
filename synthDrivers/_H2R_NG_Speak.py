@@ -499,12 +499,15 @@ def init_eng_synth(default_synth="oneCore"):
 
     eng_synth = config.conf.get("hear2read", {}).get("engSynth", default_synth)
     eng_voice = config.conf.get("hear2read", {}).get("engVoice", "")
+    eng_variant = config.conf.get("hear2read", {}).get("engVariant", "")
 
     log.info(f"init_eng_synth: got synth and voice from config: {eng_synth}, {eng_voice}")
 
     set_eng_synth(eng_synth=eng_synth)
     if eng_voice and eng_voice in get_eng_synth_voicelist().keys():
         set_eng_voice(eng_voice)
+    if eng_variant and eng_variant in get_eng_synth_variantlist().keys():
+        set_eng_variant(eng_variant)
 
     set_eng_synth_rate(config.conf["hear2read"]["engRate"])
     set_eng_synth_pitch(config.conf["hear2read"]["engPitch"])
@@ -553,6 +556,7 @@ def get_eng_voice():
 def set_eng_voice(voice_id):
     if voice_id not in get_eng_synth_voicelist().keys():
         log.warn(f"English voice {voice_id} not found in synthesizer, skipping")
+        return
     log.info(f"set_eng_voice: {voice_id}")
     EngSynth._set_voice(voice_id)
 
@@ -563,6 +567,19 @@ def set_eng_voice(voice_id):
         log.info(f"2nd attempt voice changed to: {get_eng_voice()}")
 
     # config.conf["hear2read"]["engVoice"] = EngSynth.voice
+
+def get_eng_variant():
+    try:
+        return EngSynth._get_variant()
+    except NotImplementedError as e:
+        return ""
+
+def set_eng_variant(variant):
+    if variant not in get_eng_synth_variantlist():
+        log.warn(f"English variant {variant} not found in synthesizer, skipping")
+        return
+
+    EngSynth._set_variant(variant)
 
 def get_eng_synth_rate():
     return EngSynth._get_rate()
@@ -620,6 +637,13 @@ def get_eng_synth_voicelist():
                 or (not voice_info.language 
                     and "english" in voice_info.displayName.lower()))
         )
+
+def get_eng_synth_variantlist():
+    try:
+        return EngSynth._get_availableVariants()
+    except NotImplementedError as e:
+        log.warn(f"get_eng_synth_variantlist: Unable to list variaants from \"{EngSynth.name}\"")
+        return []
     
 def speak_eng(speech_sequence):
     # TODO throw exception if not?
