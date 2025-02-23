@@ -10,6 +10,7 @@ from functools import partial
 from pathlib import Path
 from threading import Event, Thread
 from urllib import request
+from urllib.error import HTTPError
 
 import core
 import gui
@@ -98,6 +99,8 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         self.display_voices = []
         # event set on network error
         self.network_error_event = Event()
+        # event set on network error
+        self.server_error_event = Event()
         # thread to perform downloads on
         self.download_thread = None
         # progress dialog to show download progress
@@ -201,10 +204,20 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         self.Fit()
         self.Layout()
         
+        # on the event of server error, warn the user and inform that only 
+        # voices already installed are being shown
+        if self.server_error_event.is_set():
+            gui.messageBox(_("Failed to connect to server " 
+                            "\nPlease contact us for assistance at feedback@hear2read.org "
+                             "\nWe will only display installed voices "),
+            # Translators: The title of a dialog presented when an error occurs.
+                            _("Network Error"),
+                            wx.OK | wx.ICON_WARNING)
+            
         # on the event of network error, warn the user and inform that only 
         # voices already installed are being shown
-        if self.network_error_event.is_set():
-            gui.messageBox(_("Failed to fetch voices from server " 
+        elif self.network_error_event.is_set():
+            gui.messageBox(_("Failed to connect to the internet " 
                             "\nPlease check your internet connection "
                              "\nWe will only display installed voices "),
             # Translators: The title of a dialog presented when an error occurs.
@@ -591,15 +604,18 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
 
         def fetch():
             """Main function to fetch the voice list from the server. Sets the
-            network_error_event attribute in case of failure 
+            server_error_event/network_error_event attribute in case of failure 
             """
             try:
                 with request.urlopen(H2RNG_VOICE_LIST_URL) as response:
                     resp_str = response.read().decode('utf-8')
                     parse_server_voices(resp_str)
+            except HTTPError as http_e:
+                self.server_error_event.set()
+                log.warn(f"Hear2Read http error: {http_e}")
             except Exception as e:
                 self.network_error_event.set()
-                log.warn(f"Hear2Read unable to access server: {e}")
+                log.warn(f"Hear2Read unable to access internet: {e}")
             finally:
                 wx.CallAfter(dismiss_loading_dialog)
                 fetch_complete_event.set()
