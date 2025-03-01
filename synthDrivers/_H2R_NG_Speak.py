@@ -348,6 +348,7 @@ def populateVoices():
     voices = dict()
     #list all files in Language directory
     file_list = os.listdir(pathName)
+    #FIXME: the english voice is obsolete, maybe remove the voiceid?
     voices[en_voice] = "English"
     for file in file_list:
         list = file.split(".")
@@ -680,6 +681,7 @@ def checkIfUpdates():
     # log.info("_H2R checkIfUpdates entered")
     # use another thread as _execWhenDone is used for synthesis -shyam
     update_thread = threading.Thread(target=_checkIfUpdates)
+    update_thread.daemon = True
     update_thread.start()
     
 def H2R_Speak_errcheck(res, func, args):

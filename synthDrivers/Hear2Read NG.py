@@ -87,7 +87,7 @@ class SynthDriver(SynthDriver):
         CharacterModeCommand,
 #        LangChangeCommand,
         BreakCommand,
-#        PitchCommand,
+        PitchCommand,
 #        RateCommand,
         # VolumeCommand,
 #        PhonemeCommand,
@@ -123,6 +123,11 @@ class SynthDriver(SynthDriver):
             "engInflection": "integer(default=80)",
         }
         config.conf.spec["hear2read"] = confspec
+
+        # Have H2R pitch be set to the engsynth value to allow PitchCommand
+        # to be used for capitals
+        config.conf["speech"][self.name]["pitch"] = config.conf[
+                                                        "hear2read"]["engPitch"]
         _H2R_NG_Speak.initialize(self._onIndexReached)
 
         #_H2R_NG_Speak.eng_synth = "oneCore"
@@ -139,7 +144,7 @@ class SynthDriver(SynthDriver):
         self.alpha_regex = re.compile("([a-zA-Z]+)", re.ASCII)
         synthIndexReached.register(self._receiveIndexNotification)
         synthDoneSpeaking.register(self._receiveDoneNotification)
-        log.info("H2R NG: init done")
+        # log.info("H2R NG: init done")
 
     def _processText(self, text):
         # We need to make several replacements.
@@ -241,6 +246,9 @@ class SynthDriver(SynthDriver):
             elif isinstance(item, BreakCommand):
                 subSequence.append(item)
                 # pass
+            elif isinstance(item, PitchCommand):
+                subSequence.append(item)
+                # pass
             elif isinstance(item, VolumeCommand):
                 subSequence.append(item)
                 # pass
@@ -276,7 +284,7 @@ class SynthDriver(SynthDriver):
         
         # log.info("Printing subsequences: ")
         # for isEng, subSeq in self.subsequences:
-        #     log.info(f"subseq: isEng {isEng}, {subSeq}")
+            # log.info(f"subseq: isEng {isEng}, {subSeq}")
 
         if self.subsequences:
             self._processSubSequences()
@@ -459,6 +467,12 @@ class SynthDriver(SynthDriver):
 
 
     def _speak_h2r(self, speechSequence: SpeechSequence):
+        """Helper function working as the speak function for pure Indic/Unicode 
+        strings 
+
+        @param speechSequence: SpeechSequence associated with the text
+        @type speechSequence: SpeechSequence
+        """
         charMode = False
         self.sequences = []
         # self.processsed_seqs = 0
@@ -497,18 +511,39 @@ class SynthDriver(SynthDriver):
         _H2R_NG_Speak.pause(switch)
 
     def _get_rate(self):
+        # we use the English voice setting to set English rate and volume
+        if self.is_curr_voice_eng():
+            return config.conf["hear2read"]["engRate"]
         return (nvdaRate)
 
     def _set_rate(self,rate):
+        # we use the English voice setting to set English rate and volume
+        if self.is_curr_voice_eng():
+            _H2R_NG_Speak.set_eng_synth_rate(rate)
+            config.conf["hear2read"]["engRate"] = rate
+            return
         # NVDA sends a rate between 0 and 100
         global nvdaRate, piperPhoneLen
         nvdaRate = rate
         piperPhoneLen = (1 / (((rate) / 75) + (1 / 3))) if (rate < 50) else (1 / (((rate - 50) / 25) + 1))
         
     def _get_volume(self):
+        # we use the English voice setting to set English rate and volume
+        # engvol = config.conf["hear2read"]["engVolume"]
+        # log.info(f"h2r _get_volume: {volume}, {engvol}")
+        if self.is_curr_voice_eng():
+            return config.conf["hear2read"]["engVolume"]
         return volume
         
     def _set_volume(self, new_volume):
+        # we use the English voice setting to set English rate and volume
+        # log.info(f"h2r _set_volume: {new_volume}, voice: {
+        # _H2R_NG_Speak.getCurrentVoice()}, is voice eng? {
+        # self.is_curr_voice_eng()}")
+        if self.is_curr_voice_eng():
+            _H2R_NG_Speak.set_eng_synth_volume(new_volume)
+            config.conf["hear2read"]["engVolume"] = new_volume
+            return
         global volume, amplitude
         volume = new_volume
         amplitude = volume        
@@ -592,7 +627,6 @@ class SynthDriver(SynthDriver):
         synthDoneSpeaking.unregister(self._receiveDoneNotification)
         synthIndexReached.unregister(self._receiveIndexNotification)
         _H2R_NG_Speak.terminate()
-        #self.eng_synth.terminate()
 
     def _get_variant(self):
         return self._variant
@@ -602,3 +636,11 @@ class SynthDriver(SynthDriver):
 
     def _getAvailableVariants(self):
         return OrderedDict((ID,VoiceInfo(ID, name)) for ID, name in self._variantDict.items())
+    
+    def is_curr_voice_eng(self):
+        """Function to check if the current voice is set to English
+
+        @return: Return True if the current voice is English
+        @rtype: bool
+        """
+        return _H2R_NG_Speak.getCurrentVoice().split("_")[0] == "en"

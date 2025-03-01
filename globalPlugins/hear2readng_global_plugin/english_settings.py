@@ -37,6 +37,9 @@ from synthDrivers._H2R_NG_Speak import (
     set_eng_voice,
 )
 
+# TODO add loading for synth change
+# TODO? add restart NVDA dialog
+
 Eng_Synth = None
 
 def get_eng_synth_list():
