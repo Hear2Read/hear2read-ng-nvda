@@ -101,7 +101,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                 # Translators: message telling the user that no voice is installed
                 _(
                     "No Indic Hear2Read voice was found.\n"
-                    "You can download Indic voices from the voice manager.\n"
+                    "Please select a Hear2Read voice to download from the manager.\n"
                     "Do you want to open the voice manager now?"
                 ),
                 # Translators: title of a message telling the user that no Hear2Read Indic voice was found

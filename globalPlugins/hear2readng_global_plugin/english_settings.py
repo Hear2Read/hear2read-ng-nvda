@@ -24,17 +24,17 @@ from synthDrivers._H2R_NG_Speak import (
     get_eng_synth_name,
     get_eng_synth_pitch,
     get_eng_synth_rate,
+    get_eng_synth_variant,
+    get_eng_synth_voice,
     get_eng_synth_voicelist,
     get_eng_synth_volume,
-    get_eng_variant,
-    get_eng_voice,
     set_eng_synth,
     set_eng_synth_inflection,
     set_eng_synth_pitch,
     set_eng_synth_rate,
+    set_eng_synth_variant,
+    set_eng_synth_voice,
     set_eng_synth_volume,
-    set_eng_variant,
-    set_eng_voice,
 )
 
 # TODO add loading for synth change
@@ -308,7 +308,7 @@ class VoiceSettingsPanel(SettingsPanel):
         self.voiceList = settingsSizerHelper.addLabeledControl(
             voiceLabelText, wx.Choice, choices=self.eng_voice_descs
         )
-        curVoice = get_eng_voice()
+        curVoice = get_eng_synth_voice()
         # confVoice = config.conf.get("hear2read", {}).get("engVoice", "")
         # TODO check if no voice available
         # log.info(f"trying to get {curVoice} from list {self.eng_voice_ids}")
@@ -442,7 +442,7 @@ class VoiceSettingsPanel(SettingsPanel):
 
     def onEngVoiceChange(self, event):
         # log.info(f"setting voice {self.voiceList.GetString(self.voiceList.GetSelection())}")
-        set_eng_voice(self.eng_voice_ids[self.voiceList.GetSelection()])
+        set_eng_synth_voice(self.eng_voice_ids[self.voiceList.GetSelection()])
     
 
     def refreshGui(self):
@@ -472,10 +472,10 @@ class VoiceSettingsPanel(SettingsPanel):
         conf_eng_variant = config.conf["hear2read"]["engVariant"]
         # need to make sure that the English voice exists in config as default
         # value is an empty string
-        if conf_eng_voice and conf_eng_voice != get_eng_voice():
-            set_eng_voice(config.conf["hear2read"]["engVoice"])
-        if conf_eng_variant and conf_eng_variant != get_eng_variant():
-            set_eng_variant(config.conf["hear2read"]["engVariant"])
+        if conf_eng_voice and conf_eng_voice != get_eng_synth_voice():
+            set_eng_synth_voice(config.conf["hear2read"]["engVoice"])
+        if conf_eng_variant and conf_eng_variant != get_eng_synth_variant():
+            set_eng_synth_variant(config.conf["hear2read"]["engVariant"])
         if config.conf["hear2read"]["engRate"] != get_eng_synth_rate():
             set_eng_synth_rate(config.conf["hear2read"]["engRate"])
         if config.conf["hear2read"]["engPitch"] != get_eng_synth_pitch():
@@ -488,8 +488,8 @@ class VoiceSettingsPanel(SettingsPanel):
     def onSave(self):
         # log.info("onSave")
         config.conf["hear2read"]["engSynth"] = get_eng_synth_name()
-        config.conf["hear2read"]["engVoice"] = get_eng_voice()
-        config.conf["hear2read"]["engVariant"] = get_eng_variant()
+        config.conf["hear2read"]["engVoice"] = get_eng_synth_voice()
+        config.conf["hear2read"]["engVariant"] = get_eng_synth_variant()
         config.conf["hear2read"]["engRate"] = get_eng_synth_rate()
         config.conf["hear2read"]["engPitch"] = get_eng_synth_pitch()
         config.conf["hear2read"]["engVolume"] = get_eng_synth_volume()

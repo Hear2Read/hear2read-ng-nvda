@@ -173,6 +173,9 @@ class SynthDriver(SynthDriver):
         return lang
 
     def speak(self, speechSequence: SpeechSequence):
+        if self.is_curr_voice_eng() or not self._get_voice():
+            _H2R_NG_Speak.speak_eng(speech_sequence=speechSequence)
+            return
         isPrevASCII = True
         firstText = True
         self.currIndex = 0
@@ -381,15 +384,11 @@ class SynthDriver(SynthDriver):
                 is_prev_valid_lang = True
                 continue
 
-            # log.info("skipped 1st if")
-
             if c in string.whitespace or c in string.punctuation:
                 if is_prev_valid_lang:
                     # log.info(f"adding punct: {c}")
                     text_bit += c
                 continue
-
-            # log.info("skipped 2st if")
 
             if  c in string.digits or re.match("\\W", c):
                 if is_prev_valid_lang:
@@ -418,10 +417,9 @@ class SynthDriver(SynthDriver):
                     is_prev_valid_lang = False
 
                 # log.info(f"adding first non native: {lang}")
+                # TODO add pitch change
                 split_texts.append((True, f"{lang} script"))
                 continue
-
-            # log.info("skipped 3st if")
 
             # Checks for whether script is English or not
             if prev_range != INDIC_RANGE:
@@ -432,8 +430,6 @@ class SynthDriver(SynthDriver):
             if is_prev_curr_lang:
                 # log.info("is_prev_curr_lang")
                 continue
-
-            # log.info("skipped 4st if")
 
             lang = unicodedata.name(c, UNK_SCRIPT).lower().split()[0]
 
@@ -551,6 +547,10 @@ class SynthDriver(SynthDriver):
     def _getAvailableVoices(self):
         # return OrderedDict((voiceID,VoiceInfo(voiceID,voiceName,voiceID.split("-")[0].split("_")[0]))
         #         for voiceID, voiceName in self.__voices.items())
+
+        if not self.__voices:
+            self.__voices = _H2R_NG_Speak.populateVoices()
+
         return OrderedDict((voiceID,VoiceInfo(voiceID,voiceName,"en"))
                 for voiceID, voiceName in self.__voices.items())
 
@@ -563,6 +563,10 @@ class SynthDriver(SynthDriver):
         # TODO: this is more or less redundant -shyam
         if "en_US" not in identifier: 
             identifier=identifier.lower()
+
+        if identifier.startswith("en"):
+            _H2R_NG_Speak.setVoiceByLanguage("en")
+            return
         
         # modifying to prevent crash on deleting a selected voice b/w sessions
         # -shyam 231107
@@ -576,7 +580,14 @@ class SynthDriver(SynthDriver):
             try:
             #TODO better exception handling
                 res = _H2R_NG_Speak._setVoiceByIdentifier(voiceID=identifier)
-                lang_iso = identifier.split("_")[0].split("-")[0]
+                if res != EE_OK:
+                    log.warn(f"Unable to set voice {identifier}, setting by lang")
+                    res = _H2R_NG_Speak.setVoiceByLanguage(
+                        identifier.split("-")[0].split("_")[0])
+                else:
+                    _H2R_NG_Speak.set_player()
+
+                # lang_iso = identifier.split("_")[0].split("-")[0]
                 return
             except Exception as e:
                 raise e
@@ -584,13 +595,20 @@ class SynthDriver(SynthDriver):
             
         self._set_script_range()
 
-    def _set_script_range(self):        
-        lang_iso = self._get_voice().split("_")[0].split("-")[0]
+    def _set_script_range(self):
+
+        try:
+            lang_iso = self._get_voice().split("_")[0].split("-")[0]
+        except AttributeError as e:
+            self._script_range = unicode_ranges["english"]
+            return
 
         if lang_iso in ["hi", "mr", "ne"]:
             self._script_range = unicode_ranges["devanagari"]
         elif lang_iso in ["as", "bn"]:
             self._script_range = unicode_ranges["bengali"]
+        elif lang_iso == "or":
+            self._script_range = unicode_ranges["oriya"]
         else:
             lang_name = _H2R_NG_Speak.lang_names[lang_iso].lower()
             self._script_range = unicode_ranges[lang_name]
@@ -643,4 +661,4 @@ class SynthDriver(SynthDriver):
         @return: Return True if the current voice is English
         @rtype: bool
         """
-        return _H2R_NG_Speak.getCurrentVoice().split("_")[0] == "en"
+        return _H2R_NG_Speak.getCurrentVoice() and _H2R_NG_Speak.getCurrentVoice().startswith("en")

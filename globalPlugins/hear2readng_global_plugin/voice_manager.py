@@ -546,6 +546,10 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                                                   f"*.{DOWNLOAD_SUFFIX}")):
             os.remove(voice_file)
 
+        # remove obsolete English voice
+        for voice_file in glob.glob(os.path.join(H2RNG_VOICES_DIR, "en*")):
+            os.remove(voice_file)
+
         for id, display_name in populateVoices().items():
             if id.startswith("en"):
                 continue

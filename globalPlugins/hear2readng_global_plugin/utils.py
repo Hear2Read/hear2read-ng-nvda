@@ -37,29 +37,50 @@ def check_files():
     present
 
     @return: returns True only if the engine DLL, the phoneme data dir
-    and the English voice files are present
+    and at least one voice are present
     @rtype: bool
     """
-    dll_is_present = False
-    phonedir_is_present = False
-    eng_voice_is_present = False
+    # dll_is_present = False
+    # phonedir_is_present = False
+    # voice_is_present = False
 
     try:
-        if os.path.isfile(H2RNG_ENGINE_DLL_PATH):
-            dll_is_present = True
+        if not os.path.isfile(H2RNG_ENGINE_DLL_PATH):
+            return False
+            # dll_is_present = True
 
-        if os.listdir(H2RNG_PHONEME_DIR):
-            phonedir_is_present = True
+        if not os.listdir(H2RNG_PHONEME_DIR):
+            return False
+            # phonedir_is_present = True
+        
+        # if os.path.isdir(H2RNG_VOICES_DIR):
+        #     file_list = os.listdir(H2RNG_VOICES_DIR)
+            
+        #     for file_name in file_list:
+        #         parts = file_name.split(".")
+        #         if parts[-1] == "onnx" and f"{file_name}.json" in file_list:
+        #             return True
+            
+        # return wx.YES == gui.messageBox(
+        #         # Translators: message telling the user that no voice is installed
+        #         _(
+        #             "Hear2Read needs to have an Indic voice to function.\n"
+        #             "Please select a Hear2Read voice to download from the manager.\n"
+        #             "Do you want to open the voice manager now?"
+        #         ),
+        #         # Translators: title of a message telling the user that no Hear2Read Indic voice was found
+        #         _("Hear2Read Indic Voices"),
+        #         wx.YES_NO | wx.ICON_WARNING,)
+    
+                # voice_is_present = True
+                # break
 
-        eng_model_file = os.path.join(H2RNG_VOICES_DIR, 
-                                    f"{EN_VOICE_ALOK}.onnx")
-        if os.path.isfile(eng_model_file) and os.path.isfile(
-                                                f"{eng_model_file}.json"):
-            eng_voice_is_present = True
     except Exception as e:
         log.warn(f"Hear2Read Indic check failed with exception: {e}")
+        return False
             
-    return dll_is_present and phonedir_is_present and eng_voice_is_present
+    return True
+    # return dll_is_present and phonedir_is_present and voice_is_present
 
 
 def move_old_voices():
@@ -129,7 +150,7 @@ def onInstall():
     moved to this version successfully
     @rtype: bool
     """
-    log.info("onInstall from manager")
+    # log.info("onInstall from manager")
 
     src_dir = os.path.join(_dir, "res")
 
