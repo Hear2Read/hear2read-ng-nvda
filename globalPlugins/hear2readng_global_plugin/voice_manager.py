@@ -18,14 +18,16 @@ import synthDriverHandler
 import wx
 from logHandler import log
 
-from synthDrivers._H2R_NG_Speak import (
+from .utils import (
     H2RNG_DATA_DIR,
     H2RNG_VOICES_DIR,
+    DownloadThread,
+    Voice,
+    check_files,
     lang_names,
+    onInstall,
     populateVoices,
 )
-
-from .utils import DownloadThread, Voice, check_files, onInstall
 
 # Constants and global variables:
 

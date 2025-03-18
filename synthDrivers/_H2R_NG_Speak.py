@@ -28,6 +28,22 @@ import wx
 from logHandler import log
 from synthDriverHandler import changeVoice, getSynthInstance
 
+# from globalPlugins.hear2readng_global_plugin.utils import (
+#     EN_VOICE_ALOK,
+#     H2RNG_DATA_DIR,
+#     H2RNG_ENGINE_DLL_PATH,
+#     H2RNG_PHONEME_DIR,
+#     H2RNG_VOICES_DIR,
+#     H2RNG_WAVS_DIR,
+# )
+
+H2RNG_DATA_DIR = os.path.join(os.getenv("APPDATA"), "Hear2Read-NG")
+H2RNG_PHONEME_DIR = os.path.join(H2RNG_DATA_DIR, "espeak-ng-data")
+H2RNG_ENGINE_DLL_PATH = os.path.join(H2RNG_DATA_DIR, "Hear2ReadNG_addon_engine.dll")
+H2RNG_VOICES_DIR = os.path.join(H2RNG_DATA_DIR, "Voices")
+H2RNG_WAVS_DIR = os.path.join(H2RNG_DATA_DIR, "wavs")
+EN_VOICE_ALOK = "en_US-arctic-medium"
+
 isSpeaking = False
 onIndexReached = None
 bgThread=None
@@ -35,12 +51,6 @@ bgQueue = None
 player = None
 H2RNG_SpeakDLL=None
 
-
-H2RNG_DATA_DIR = os.path.join(os.getenv("APPDATA"), "Hear2Read-NG")
-H2RNG_VOICES_DIR = os.path.join(H2RNG_DATA_DIR, "Voices")
-H2RNG_PHONEME_DIR = os.path.join(H2RNG_DATA_DIR, "espeak-ng-data")
-H2RNG_WAVS_DIR = os.path.join(H2RNG_DATA_DIR, "wavs")
-H2RNG_ENGINE_DLL_PATH = os.path.join(H2RNG_DATA_DIR, "Hear2ReadNG_addon_engine.dll")
 
 #error codes
 EE_OK=0
@@ -51,7 +61,6 @@ EE_NOT_FOUND=2
 # offset between ascii and devanagari digits in unicode
 DEVANAGARI_DIGIT_OFFSET = 2358
 
-EN_VOICE_ALOK = "en_US-arctic-medium"
 en_voice = EN_VOICE_ALOK
 
 eng_synth = "oneCore"
@@ -60,21 +69,6 @@ EngSynth = None
 ALOK_ID = 13
 DIPAL_ID = 2
 AMARPREET_ID = 1
-
-lang_names = {"as":"Assamese", 
-                "bn":"Bengali", 
-                "gu":"Gujarati", 
-                "hi":"Hindi", 
-                "kn":"Kannada", 
-                "ml":"Malayalam", 
-                "mr":"Marathi", 
-                "ne":"Nepali", 
-                "or":"Odia", 
-                "pa":"Punjabi", 
-                "si":"Sinhala",
-                "ta":"Tamil", 
-                "te":"Telugu", 
-                "en":"English"}
 qual_to_hz = {"low":16000, "med":22050}
 digit_offsets = {"as": 2486, "ne":2358}
 
@@ -110,15 +104,25 @@ def getCurrentVoice():
         return curr_voice
     else:
     # TODO: raise exception?
+        # setCurrentVoice(en_voice)
+        # return en_voice
         return None
         
 def setCurrentVoice(voiceID):
+    log.info(f"H2R setCurrentVoice: {voiceID}")
     global curr_voice
     curr_voice = voiceID
 
 @t_H2RNG_audiocallback
 def audiocallback(wav, numsamples): #, isEng):
     global isSpeaking
+
+    if not player:
+        set_player()
+
+    if not player:
+        log.error("Hear2Read no voice found exiting synthesis")
+        return CALLBACK_ABORT_SYNTHESIS
     
     try:
         if not isSpeaking:
@@ -296,6 +300,10 @@ def speak(text, params):
     # break text info individual sentences if necessary and send only 1 sentence at a time to DLL
     # end of sentence is period or denda
 #    text=text.encode('utf8',errors='ignore')
+
+    if not player:
+        set_player()
+
     if params.charMode:
         _execWhenDone(_speak, characterMode(text), params, mustBeAsync=True)
         return
@@ -322,49 +330,27 @@ def stop():
         bgQueue.put(item)
     isSpeaking = False
 #    H2RNG_SpeakDLL.H2R_Speak_stop();
-    player.stop()
+
+    if player:
+        player.stop()
 
     if EngSynth:
         EngSynth.cancel()
 
-def pause(switch):    
-    player.pause(switch)
+def pause(switch):
+    if player:
+        player.pause(switch)
     if EngSynth:
         EngSynth.pause(switch)
 
-def populateVoices():
-    pathName = os.path.join(H2RNG_VOICES_DIR)
-    voices = dict()
-    #list all files in Language directory
-    file_list = os.listdir(pathName)
-    #FIXME: the english voice is obsolete, maybe remove the voiceid?
-    voices[en_voice] = "English"
-    for file in file_list:
-        list = file.split(".")
-        if list[-1] == "onnx":
-            if f"{file}.json" not in file_list:
-                continue
-            nameList = list[0].split("-")
-            lang = nameList[0].split("_")[0]
-            
-            # Already set the sole English voice
-            if lang == "en":
-                continue
-            
-            language = lang_names.get(lang)
-            if language:
-                voices[list[0]] = language
-            else:
-                voices[list[0]] = f"Unknown language ({list[0]})"
-
-    return voices
-
 def set_player():
     global player, curr_qual
-    curr_attrs = curr_voice.split("-")
+    if not getCurrentVoice():
+        return
+    curr_attrs = getCurrentVoice().split("-")
     qual = curr_attrs[-1][:3]
 
-    if curr_qual != qual:
+    if curr_qual != qual or not player:
         if player:
             player.close()
         curr_qual = qual
@@ -381,11 +367,12 @@ def _setVoiceByIdentifier(voiceID):
     else:
         return EE_NOT_FOUND
         
-    if voiceID == curr_voice:
+    if voiceID == getCurrentVoice():
         return EE_OK
      
     # workaround to set dipal's voice as default for guj, if the json doesn't 
     # contain the correct ID
+    # TODO check this
     if (voice_attrs[0] == "gu" and voice_attrs[1] == "h2r"
         and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0):
         setCurrentVoice(voiceID)
@@ -416,8 +403,6 @@ def _setVoiceByIdentifier(voiceID):
 #TODO default voice
 def setVoiceByLanguage(lang):
     
-    global curr_voice, player
-    
     lang = lang.split("_")[0]
     
     if lang == "en":
@@ -442,7 +427,7 @@ def setVoiceByLanguage(lang):
                 hr = _setVoiceByIdentifier(parts[0])
                 setCurrentVoice(parts[0])
                 set_player()
-                return curr_voice
+                return getCurrentVoice()
                 
                 # TODO: send error message on fail
 
@@ -453,13 +438,15 @@ def setVoiceByLanguage(lang):
                 hr = _setVoiceByIdentifier(parts[0])
                 setCurrentVoice(parts[0])
                 set_player()
-                return curr_voice
+                return getCurrentVoice()
     
+    log.warn("Hear2Read no voices found")
+    return None
 
     # TODO inform user
     # exceptionString = "No Voices found  '" + lang + "'"
     # raise Exception(exceptionString)
-    return None
+    # return None
 
 
 def init_eng_synth(default_synth="oneCore"):
@@ -468,13 +455,13 @@ def init_eng_synth(default_synth="oneCore"):
     eng_voice = config.conf.get("hear2read", {}).get("engVoice", "")
     eng_variant = config.conf.get("hear2read", {}).get("engVariant", "")
 
-    log.info(f"init_eng_synth: got synth and voice from config: {eng_synth}, {eng_voice}")
+    # log.info(f"init_eng_synth: got synth and voice from config: {eng_synth}, {eng_voice}")
 
     set_eng_synth(eng_synth=eng_synth)
 
     supportedSettings = EngSynth.supportedSettings
 
-    log.info(f"got supported eng settings: {supportedSettings}")
+    # log.info(f"got supported eng settings: {supportedSettings}")
 
     if eng_voice and eng_voice in get_eng_synth_voicelist().keys():
         set_eng_synth_voice(eng_voice)
@@ -668,7 +655,7 @@ def initialize(idxCallback=None):
         It is called with one argument:
         the number of the index or C{None} when speech stops.
     """
-    global H2RNG_SpeakDLL, EngSynth, bgThread, bgQueue, player, onIndexReached#, i, libc
+    global H2RNG_SpeakDLL, bgThread, bgQueue, onIndexReached#, i, libc
     
     H2RNG_SpeakDLL = cdll.LoadLibrary(H2RNG_ENGINE_DLL_PATH)
 
@@ -690,7 +677,7 @@ def initialize(idxCallback=None):
 
     onIndexReached = idxCallback
     bgQueue = queue.Queue()
-    bgThread=BgThread()
+    bgThread = BgThread()
     bgThread.start()
 
     init_eng_synth()
@@ -699,15 +686,18 @@ def initialize(idxCallback=None):
 def terminate():
     global bgThread, bgQueue, player, H2RNG_SpeakDLL , onIndexReached, EngSynth
     stop()
-    bgQueue.put((None, None, None))
-    bgThread.join()
-    H2RNG_SpeakDLL.H2R_Speak_Terminate()
+    if bgQueue:
+        bgQueue.put((None, None, None))
+    if bgThread:
+        bgThread.join()
+    if H2RNG_SpeakDLL:
+        H2RNG_SpeakDLL.H2R_Speak_Terminate()
+        del H2RNG_SpeakDLL
     bgThread=None
     bgQueue=None
-    player.close()
+    if player:
+        player.close()
     player=None
-    # H2RNG_SpeakDLL=None
-    del H2RNG_SpeakDLL
     onIndexReached = None
     if EngSynth:
         EngSynth.cancel()

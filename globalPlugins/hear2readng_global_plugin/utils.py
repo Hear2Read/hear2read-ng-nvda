@@ -21,6 +21,28 @@ from synthDrivers._H2R_NG_Speak import (
     H2RNG_WAVS_DIR,
 )
 
+# H2RNG_DATA_DIR = os.path.join(os.getenv("APPDATA"), "Hear2Read-NG")
+# H2RNG_PHONEME_DIR = os.path.join(H2RNG_DATA_DIR, "espeak-ng-data")
+# H2RNG_ENGINE_DLL_PATH = os.path.join(H2RNG_DATA_DIR, "Hear2ReadNG_addon_engine.dll")
+# H2RNG_VOICES_DIR = os.path.join(H2RNG_DATA_DIR, "Voices")
+# H2RNG_WAVS_DIR = os.path.join(H2RNG_DATA_DIR, "wavs")
+# EN_VOICE_ALOK = "en_US-arctic-medium"
+
+lang_names = {"as":"Assamese", 
+                "bn":"Bengali", 
+                "gu":"Gujarati", 
+                "hi":"Hindi", 
+                "kn":"Kannada", 
+                "ml":"Malayalam", 
+                "mr":"Marathi", 
+                "ne":"Nepali", 
+                "or":"Odia", 
+                "pa":"Punjabi", 
+                "si":"Sinhala",
+                "ta":"Tamil", 
+                "te":"Telugu", 
+                "en":"English"}
+
 try:
     _dir=os.path.dirname(__file__.decode("mbcs"))
 except AttributeError:
@@ -83,6 +105,34 @@ def check_files():
     # return dll_is_present and phonedir_is_present and voice_is_present
 
 
+def populateVoices():
+    pathName = os.path.join(H2RNG_VOICES_DIR)
+    voices = dict()
+    #list all files in Language directory
+    file_list = os.listdir(pathName)
+    #FIXME: the english voice is obsolete, maybe remove the voiceid?
+    en_voice = EN_VOICE_ALOK
+    voices[en_voice] = "English"
+    for file in file_list:
+        list = file.split(".")
+        if list[-1] == "onnx":
+            if f"{file}.json" not in file_list:
+                continue
+            nameList = list[0].split("-")
+            lang = nameList[0].split("_")[0]
+            
+            # Already set the sole English voice
+            if lang == "en":
+                continue
+            
+            language = lang_names.get(lang)
+            if language:
+                voices[list[0]] = language
+            else:
+                voices[list[0]] = f"Unknown language ({list[0]})"
+
+    return voices
+
 def move_old_voices():
     """Tries to move voices downloaded in addon version 1.4 and lower to the 
     new dir structure to be usable by this addon. This is slightly different 
@@ -140,6 +190,7 @@ def move_old_voices():
             
     return voices_moved
 
+# def show_voice_manager():
 
 def onInstall():
     """A fallback that tries moving the required data files in case it wasn't

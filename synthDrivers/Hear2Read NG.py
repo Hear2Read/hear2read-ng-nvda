@@ -10,7 +10,9 @@ import unicodedata
 from collections import OrderedDict
 
 import config
+import gui
 import languageHandler
+import wx
 
 # import globalVars
 from logHandler import log
@@ -33,7 +35,14 @@ from synthDriverHandler import (
     synthIndexReached,
 )
 
-from globalPlugins.hear2readng_global_plugin.utils import check_files
+from globalPlugins.hear2readng_global_plugin.utils import (
+    check_files,
+    lang_names,
+    populateVoices,
+)
+from globalPlugins.hear2readng_global_plugin.voice_manager import (
+    Hear2ReadNGVoiceManagerDialog,
+)
 
 from . import _H2R_NG_Speak
 
@@ -104,7 +113,7 @@ class SynthDriver(SynthDriver):
             # try:
                 # install_tasks()
             # except Exception as e:
-                # log.error(f"Hear2Read Indic install tasks on check synth failed: {e}")
+                #pass#log.error(f"Hear2Read Indic install tasks on check synth failed: {e}")
             # finally:
                 # return check_files()
         return True
@@ -112,7 +121,7 @@ class SynthDriver(SynthDriver):
     def __init__(self):
         if not self.check():
             return
-        # log.info("H2R NG: init started")
+        log.info("H2R NG: init started")
         confspec = {
             "engSynth": "string(default='oneCore')",
             "engVoice": "string(default='')",
@@ -139,12 +148,13 @@ class SynthDriver(SynthDriver):
         #         eng_voice = voice.id
         #         self.eng_synth._set_voice(eng_voice)
 
-        self.__voices = _H2R_NG_Speak.populateVoices()
+        self.__voices = populateVoices()
+        self.subsequences = []
         self._variant="0"
         self.alpha_regex = re.compile("([a-zA-Z]+)", re.ASCII)
         synthIndexReached.register(self._receiveIndexNotification)
         synthDoneSpeaking.register(self._receiveDoneNotification)
-        # log.info("H2R NG: init done")
+        log.info("H2R NG: init done")
 
     def _processText(self, text):
         # We need to make several replacements.
@@ -173,14 +183,17 @@ class SynthDriver(SynthDriver):
         return lang
 
     def speak(self, speechSequence: SpeechSequence):
+        # log.info("H2R speak")
+        # log.info(f"speech sequence: {speechSequence}")
+        self.subsequences = []
         if self.is_curr_voice_eng() or not self._get_voice():
+            # self.subsequences.append(speechSequence)
             _H2R_NG_Speak.speak_eng(speech_sequence=speechSequence)
             return
         isPrevASCII = True
         firstText = True
         self.currIndex = 0
         self.negIndex = -2
-        self.subsequences = []
         subSequence : SpeechSequence = []
         indexCmd = None
         
@@ -188,7 +201,6 @@ class SynthDriver(SynthDriver):
 
         # log.info(f"got script range: {hex(self._script_range[0])} - {hex(self._script_range[1])}")
 
-        # log.info(f"speech sequence: {speechSequence}")
         for item in speechSequence:
             if isinstance(item,str):
                 text = item
@@ -287,7 +299,7 @@ class SynthDriver(SynthDriver):
         
         # log.info("Printing subsequences: ")
         # for isEng, subSeq in self.subsequences:
-            # log.info(f"subseq: isEng {isEng}, {subSeq}")
+        #     log.info(f"subseq: isEng {isEng}, {subSeq}")
 
         if self.subsequences:
             self._processSubSequences()
@@ -498,12 +510,12 @@ class SynthDriver(SynthDriver):
             _H2R_NG_Speak.speak(textmarked, params)
 
     def cancel(self):
-        # log.info("cancel")
+        log.info("cancel")
         self.subsequences = []
         _H2R_NG_Speak.stop()
 
     def pause(self,switch):
-        # log.info("pause")
+        log.info("pause")
         _H2R_NG_Speak.pause(switch)
 
     def _get_rate(self):
@@ -526,16 +538,14 @@ class SynthDriver(SynthDriver):
     def _get_volume(self):
         # we use the English voice setting to set English rate and volume
         # engvol = config.conf["hear2read"]["engVolume"]
-        # log.info(f"h2r _get_volume: {volume}, {engvol}")
+        # log.info(f"h2r _get_volume: {volume}")
         if self.is_curr_voice_eng():
             return config.conf["hear2read"]["engVolume"]
         return volume
         
     def _set_volume(self, new_volume):
         # we use the English voice setting to set English rate and volume
-        # log.info(f"h2r _set_volume: {new_volume}, voice: {
-        # _H2R_NG_Speak.getCurrentVoice()}, is voice eng? {
-        # self.is_curr_voice_eng()}")
+
         if self.is_curr_voice_eng():
             _H2R_NG_Speak.set_eng_synth_volume(new_volume)
             config.conf["hear2read"]["engVolume"] = new_volume
@@ -549,15 +559,25 @@ class SynthDriver(SynthDriver):
         #         for voiceID, voiceName in self.__voices.items())
 
         if not self.__voices:
-            self.__voices = _H2R_NG_Speak.populateVoices()
+            self.__voices = populateVoices()
 
         return OrderedDict((voiceID,VoiceInfo(voiceID,voiceName,"en"))
                 for voiceID, voiceName in self.__voices.items())
 
     def _get_voice(self):
-        return _H2R_NG_Speak.getCurrentVoice()
+        log.info("H2R get_voice")
+        curr_voice = _H2R_NG_Speak.getCurrentVoice()
+        return curr_voice if curr_voice else _H2R_NG_Speak.EN_VOICE_ALOK
 
     def _set_voice(self, identifier):
+        log.info(f"H2R _set_voice: {identifier}")
+
+        if len(self.__voices) < 2:
+            _H2R_NG_Speak.setVoiceByLanguage("en")
+            # wx.CallAfter(self.on_no_voices, id=identifier)
+            return
+
+        res = None
         if not identifier:
             return
         # TODO: this is more or less redundant -shyam
@@ -571,9 +591,11 @@ class SynthDriver(SynthDriver):
         # modifying to prevent crash on deleting a selected voice b/w sessions
         # -shyam 231107
         if identifier not in self.__voices.keys():            
-            self.__voices = _H2R_NG_Speak.populateVoices()
+            self.__voices = populateVoices()
             
             if identifier not in self.__voices.keys():
+                log.warn(f"Hear2Read voice not found: {identifier}, "
+                         "setting available voice")
                 res = _H2R_NG_Speak.setVoiceByLanguage(identifier.split("-")[0].split("_")[0])
         
         else:
@@ -581,7 +603,7 @@ class SynthDriver(SynthDriver):
             #TODO better exception handling
                 res = _H2R_NG_Speak._setVoiceByIdentifier(voiceID=identifier)
                 if res != EE_OK:
-                    log.warn(f"Unable to set voice {identifier}, setting by lang")
+                    log.warn(f"Hear2Read unable to set voice {identifier}, setting by lang")
                     res = _H2R_NG_Speak.setVoiceByLanguage(
                         identifier.split("-")[0].split("_")[0])
                 else:
@@ -591,7 +613,12 @@ class SynthDriver(SynthDriver):
                 return
             except Exception as e:
                 raise e
-                return
+                return            
+            
+        if res != EE_OK:
+            # self.on_no_voices(id=identifier)
+            _H2R_NG_Speak.setVoiceByLanguage("en")
+            return
             
         self._set_script_range()
 
@@ -610,7 +637,7 @@ class SynthDriver(SynthDriver):
         elif lang_iso == "or":
             self._script_range = unicode_ranges["oriya"]
         else:
-            lang_name = _H2R_NG_Speak.lang_names[lang_iso].lower()
+            lang_name = lang_names[lang_iso].lower()
             self._script_range = unicode_ranges[lang_name]
 
     def _onIndexReached(self, index):
@@ -661,4 +688,5 @@ class SynthDriver(SynthDriver):
         @return: Return True if the current voice is English
         @rtype: bool
         """
-        return _H2R_NG_Speak.getCurrentVoice() and _H2R_NG_Speak.getCurrentVoice().startswith("en")
+        return (_H2R_NG_Speak.getCurrentVoice() and 
+                _H2R_NG_Speak.getCurrentVoice().startswith("en"))
