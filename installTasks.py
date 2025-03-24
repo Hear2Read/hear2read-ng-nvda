@@ -4,6 +4,7 @@
 
 import os
 import shutil
+import sys
 
 import gui
 import wx
@@ -47,8 +48,7 @@ def move_old_voices():
 
         if os.path.isdir(old_wavs_dir):
             try:
-                shutil.copytree(src=old_wavs_dir, dst=H2RNG_WAVS_DIR, 
-                                dirs_exist_ok=True)
+                copytree_overwrite(src=old_wavs_dir, dst=H2RNG_WAVS_DIR)
             except Exception as e:
                 log.warn(f"Hear2Read Indic unable to copy old wav folders: {e}")
 
@@ -71,6 +71,41 @@ def move_old_voices():
         except Exception as e:
             log.warn("Hear2Read Indic unable to remove old Hear2Read data folder: "
                      f"{e}")
+
+def copytree_compat(src, dst):
+    """Copytree version with overwrite compatible for Python < 3.8. This is
+    copied from the answer https://stackoverflow.com/a/13814557, and has a 
+    fairly basic functionality not accounting for symlinks, which is sufficient
+    for our purposes
+
+    @param src: path to the source, to be copied from
+    @type src: string
+    @param dst: path to the destination, to be copied to
+    @type dst: string
+    """
+    if not os.path.exists(dst):
+        os.makedirs(dst)
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            copytree_compat(s, d)
+        else:
+            if not os.path.exists(d) or os.stat(s).st_mtime - os.stat(d).st_mtime > 1:
+                shutil.copy2(s, d)
+
+def copytree_overwrite(src, dst):
+    """Wrapper to enable consistent behaviour in Python version < 3.8
+
+    @param src: path to the source, to be copied from
+    @type src: string
+    @param dst: path to the destination, to be copied to
+    @type dst: string
+    """
+    if sys.version_info >= (3, 8):
+        shutil.copytree(src=src, dst=dst, dirs_exist_ok=True)
+    else:
+        copytree_compat(src=src, dst=dst)
                 
 def onInstall():
     """Copies essential Hear2Read files to the designated data folder, then
@@ -107,7 +142,7 @@ def onInstall():
                 log.warn("Unable to update Hear2Read properly. Old voices may be deleted")
 
     try:
-        shutil.copytree(src=src_dir, dst=H2RNG_DATA_DIR, dirs_exist_ok=True)
+        copytree_overwrite(src=src_dir, dst=H2RNG_DATA_DIR)
         shutil.rmtree(src_dir)
     except Exception as e:
         log.warn(f"Error installing Hear2Read Indic data files: {e}")

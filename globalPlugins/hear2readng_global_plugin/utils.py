@@ -4,6 +4,7 @@
 
 import os
 import shutil
+import sys
 import urllib.request
 from dataclasses import dataclass
 from threading import Thread
@@ -43,6 +44,11 @@ lang_names = {"as":"Assamese",
                 "te":"Telugu", 
                 "en":"English"}
 
+# URL suffix for voice files
+H2RNG_VOICES_DOWNLOAD_HTTP = "https://hear2read.org/Hear2Read/voices-piper/"
+# voice list URL
+H2RNG_VOICE_LIST_URL = "https://hear2read.org/nvda-addon/getH2RNGVoiceNames.php"
+
 try:
     _dir=os.path.dirname(__file__.decode("mbcs"))
 except AttributeError:
@@ -52,6 +58,42 @@ _dir = os.path.abspath(os.path.join(_dir, os.pardir, os.pardir))
     
 OLD_H2RNG_DATA_DIR = os.path.join(os.environ['ALLUSERSPROFILE'], 
                                   "Hear2Read-ng")
+
+def copytree_compat(src, dst):
+    """Copytree version with overwrite compatible for Python < 3.8. This is
+    copied from the answer https://stackoverflow.com/a/13814557, and has a 
+    fairly basic functionality not accounting for symlinks, which is sufficient
+    for our purposes
+
+    @param src: path to the source, to be copied from
+    @type src: string
+    @param dst: path to the destination, to be copied to
+    @type dst: string
+    """
+    if not os.path.exists(dst):
+        os.makedirs(dst)
+    for item in os.listdir(src):
+        s = os.path.join(src, item)
+        d = os.path.join(dst, item)
+        if os.path.isdir(s):
+            copytree_compat(s, d)
+        else:
+            if not os.path.exists(d) or os.stat(s).st_mtime - os.stat(d).st_mtime > 1:
+                shutil.copy2(s, d)
+
+def copytree_overwrite(src, dst):
+    """Wrapper to enable consistent behaviour in Python version < 3.8
+
+    @param src: path to the source, to be copied from
+    @type src: string
+    @param dst: path to the destination, to be copied to
+    @type dst: string
+    """
+    if sys.version_info >= (3, 8):
+        shutil.copytree(src=src, dst=dst, dirs_exist_ok=True)
+    else:
+        copytree_compat(src=src, dst=dst)
+
 
 def check_files():
     """
@@ -74,28 +116,6 @@ def check_files():
         if not os.listdir(H2RNG_PHONEME_DIR):
             return False
             # phonedir_is_present = True
-        
-        # if os.path.isdir(H2RNG_VOICES_DIR):
-        #     file_list = os.listdir(H2RNG_VOICES_DIR)
-            
-        #     for file_name in file_list:
-        #         parts = file_name.split(".")
-        #         if parts[-1] == "onnx" and f"{file_name}.json" in file_list:
-        #             return True
-            
-        # return wx.YES == gui.messageBox(
-        #         # Translators: message telling the user that no voice is installed
-        #         _(
-        #             "Hear2Read needs to have an Indic voice to function.\n"
-        #             "Please select a Hear2Read voice to download from the manager.\n"
-        #             "Do you want to open the voice manager now?"
-        #         ),
-        #         # Translators: title of a message telling the user that no Hear2Read Indic voice was found
-        #         _("Hear2Read Indic Voices"),
-        #         wx.YES_NO | wx.ICON_WARNING,)
-    
-                # voice_is_present = True
-                # break
 
     except Exception as e:
         log.warn(f"Hear2Read Indic check failed with exception: {e}")
@@ -103,6 +123,40 @@ def check_files():
             
     return True
     # return dll_is_present and phonedir_is_present and voice_is_present
+
+
+def parse_server_voices(resp_str):
+    """Parses the pipe separated file list response from the server
+
+    @param resp_str: string of pipe separated voice related files
+    @type resp_str: string
+    """
+    server_voices = {}
+    server_files = resp_str.split('|')
+    for file in server_files:
+        if file.startswith("en"):
+            continue
+        parts = file.split(".")
+        if parts[-1] == "onnx":
+            if f"{file}.json" in server_files:
+                iso_lang = parts[0].split("-")[0].split("_")[0]
+                extra = False
+                if f"{file}.zip" in server_files:
+                    extra = True
+                if iso_lang in lang_names.keys():
+                    server_voices[iso_lang] = Voice(id=parts[0], 
+                            lang_iso=iso_lang,
+                            display_name=lang_names[iso_lang],
+                            state="Download", 
+                            extra=extra)
+                else:
+                    server_voices[iso_lang] = Voice(id=parts[0], 
+                            lang_iso=iso_lang,
+                            display_name=f"Unknown Lang ({iso_lang})",
+                            state="Download", 
+                            extra=extra)
+
+    return server_voices
 
 
 def populateVoices():
@@ -164,8 +218,7 @@ def move_old_voices():
 
         if os.path.isdir(old_wavs_dir):
             try:
-                shutil.copytree(src=old_wavs_dir, dst=H2RNG_WAVS_DIR, 
-                                dirs_exist_ok=True)
+                copytree_overwrite(src=old_wavs_dir, dst=H2RNG_WAVS_DIR)
             except Exception as e:
                 log.warn("Hear2Read Indic unable to copy old wav folders")
 
@@ -194,7 +247,8 @@ def move_old_voices():
 
 def onInstall():
     """A fallback that tries moving the required data files in case it wasn't
-    done by installTasks.py
+    done by installTasks.py It is duplicated as importing is not available with
+    installTasks.py
 
     @raises e: raises any exceptions that can occur while transferring the data
     @return: returns True if any voices from an older version (<v1.5) have been
@@ -206,7 +260,7 @@ def onInstall():
     src_dir = os.path.join(_dir, "res")
 
     try:
-        shutil.copytree(src=src_dir, dst=H2RNG_DATA_DIR, dirs_exist_ok=True)
+        copytree_overwrite(src=src_dir, dst=H2RNG_DATA_DIR)
         shutil.rmtree(src_dir)
     except Exception as e:
         log.warn(f"Error installing Hear2Read Indic data files: {e}")

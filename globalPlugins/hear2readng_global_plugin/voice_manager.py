@@ -18,14 +18,19 @@ import synthDriverHandler
 import wx
 from logHandler import log
 
+from synthDrivers._H2R_NG_Speak import H2RNG_DATA_DIR, H2RNG_VOICES_DIR
+
 from .utils import (
-    H2RNG_DATA_DIR,
-    H2RNG_VOICES_DIR,
+    # H2RNG_DATA_DIR,
+    H2RNG_VOICE_LIST_URL,
+    # H2RNG_VOICES_DIR,
+    H2RNG_VOICES_DOWNLOAD_HTTP,
     DownloadThread,
     Voice,
     check_files,
-    lang_names,
+    # lang_names,
     onInstall,
+    parse_server_voices,
     populateVoices,
 )
 
@@ -34,10 +39,6 @@ from .utils import (
 DLL_FILE_NAME_PREFIX = "Hear2ReadNG_addon_engine"
 DOWNLOAD_SUFFIX = ".download"
 
-# URL suffix for voice files
-H2RNG_VOICES_DOWNLOAD_HTTP = "https://hear2read.org/Hear2Read/voices-piper/"
-# voice list URL
-H2RNG_VOICE_LIST_URL = "https://hear2read.org/nvda-addon/getH2RNGVoiceNames.php"
 
 # TODO remove copyright, add copyright
 # TODO rename the synth file to have no spaces(?)
@@ -529,6 +530,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                     wx.OK | wx.ICON_WARNING
                 )
 
+    # TODO remove duplicate of utils.populateVoices
     @classmethod  
     def get_installed_voices(self):
         """Classmethod to get installed voices. Returns a dictionary of voices
@@ -561,7 +563,6 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         
         return installed_voices
 
-
     def get_server_voices(self):
         """Populated the list of voices available on the server. Modifies the 
         class attribute server_voices, a list of Voice objects. The operation
@@ -574,35 +575,6 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                                         parent=self)
         wx.Yield()
 
-        def parse_server_voices(resp_str):
-            """Parses the pipe separated file list response from the server
-
-            @param resp_str: string of pipe separated voice related files
-            @type resp_str: string
-            """
-            server_files = resp_str.split('|')
-            for file in server_files:
-                if file.startswith("en"):
-                    continue
-                parts = file.split(".")
-                if parts[-1] == "onnx":
-                    if f"{file}.json" in server_files:
-                        iso_lang = parts[0].split("-")[0].split("_")[0]
-                        extra = False
-                        if f"{file}.zip" in server_files:
-                            extra = True
-                        if iso_lang in lang_names.keys():
-                            self.server_voices[iso_lang] = Voice(id=parts[0], 
-                                    lang_iso=iso_lang,
-                                    display_name=lang_names[iso_lang],
-                                    state="Download", 
-                                    extra=extra)
-                        else:
-                            self.server_voices[iso_lang] = Voice(id=parts[0], 
-                                    lang_iso=iso_lang,
-                                    display_name=f"Unknown Lang ({iso_lang})",
-                                    state="Download", 
-                                    extra=extra)
 
         def dismiss_loading_dialog():
             nonlocal loading_dialog
@@ -615,7 +587,8 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
             try:
                 with request.urlopen(H2RNG_VOICE_LIST_URL) as response:
                     resp_str = response.read().decode('utf-8')
-                    parse_server_voices(resp_str)
+                    self.server_voices = parse_server_voices(resp_str)
+                    # parse_server_voices(resp_str)
             except HTTPError as http_e:
                 self.server_error_event.set()
                 log.warn(f"Hear2Read http error: {http_e}")
