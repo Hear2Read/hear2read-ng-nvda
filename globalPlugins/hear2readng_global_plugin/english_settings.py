@@ -54,8 +54,8 @@ def get_eng_synth_list():
             get_eng_synth_name() in synthName):
             continue
         
-        synth = getSynthInstance(synthName)
         try:
+            synth = getSynthInstance(synthName)
             voices = synth._get_availableVoices()
         except Exception as e:
             log.warn(f"Unable to list voices from \"{synthName}\", skipping")

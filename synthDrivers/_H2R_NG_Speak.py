@@ -117,6 +117,8 @@ def setCurrentVoice(voiceID):
 def audiocallback(wav, numsamples): #, isEng):
     global isSpeaking
 
+    # log.info(F"audiocallback: {numsamples}")
+
     if not player:
         set_player()
 

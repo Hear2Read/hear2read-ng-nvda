@@ -270,6 +270,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         # the main model file
         file = f"{voice.id}.onnx"
         download_url = f"{H2RNG_VOICES_DOWNLOAD_HTTP}{file}"
+        # log.info(f"download_voice on: {voice.id}, URL: {download_url}")
         download_queue.append((os.path.join(H2RNG_VOICES_DIR,
                                             f"{file}{DOWNLOAD_SUFFIX}"), 
                                download_url))
@@ -588,6 +589,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                 with request.urlopen(H2RNG_VOICE_LIST_URL) as response:
                     resp_str = response.read().decode('utf-8')
                     self.server_voices = parse_server_voices(resp_str)
+                    # log.info(f"parse_server_voices: {self.server_voices}")
                     # parse_server_voices(resp_str)
             except HTTPError as http_e:
                 self.server_error_event.set()

@@ -46,8 +46,10 @@ lang_names = {"as":"Assamese",
 
 # URL suffix for voice files
 H2RNG_VOICES_DOWNLOAD_HTTP = "https://hear2read.org/Hear2Read/voices-piper/"
+# H2RNG_VOICES_DOWNLOAD_HTTP = "https://hear2read.org/Hear2Read/voices-piper/phone_dur/"
 # voice list URL
 H2RNG_VOICE_LIST_URL = "https://hear2read.org/nvda-addon/getH2RNGVoiceNames.php"
+# H2RNG_VOICE_LIST_URL = "https://hear2read.org/nvda-addon/getH2RNG2VoiceNames.php"
 
 try:
     _dir=os.path.dirname(__file__.decode("mbcs"))

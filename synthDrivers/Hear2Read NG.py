@@ -135,8 +135,21 @@ class SynthDriver(SynthDriver):
 
         # Have H2R pitch be set to the engsynth value to allow PitchCommand
         # to be used for capitals
-        config.conf["speech"][self.name]["pitch"] = config.conf[
+        try:
+            config.conf["speech"][self.name]["pitch"] = config.conf[
                                                         "hear2read"]["engPitch"]
+        except KeyError as e:
+            if self.name in str(e):
+                log.info("Hear2Read no config found, updating default config")
+                confspec_default = {
+                    "voice": f"string(default='{_H2R_NG_Speak.en_voice}')",
+                    "rate": "integer(default=50)",
+                    "pitch": "integer(default=50)",
+                    "volume": "integer(default=100)",
+                    "capPitchChange": "integer(default=30)",
+                }
+                config.conf.spec["speech"][self.name] = confspec_default
+                
         _H2R_NG_Speak.initialize(self._onIndexReached)
 
         #_H2R_NG_Speak.eng_synth = "oneCore"
