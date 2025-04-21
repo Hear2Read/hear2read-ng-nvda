@@ -523,12 +523,12 @@ class SynthDriver(SynthDriver):
             _H2R_NG_Speak.speak(textmarked, params)
 
     def cancel(self):
-        log.info("cancel")
+        # log.info("cancel")
         self.subsequences = []
         _H2R_NG_Speak.stop()
 
     def pause(self,switch):
-        log.info("pause")
+        # log.info("pause")
         _H2R_NG_Speak.pause(switch)
 
     def _get_rate(self):
@@ -578,12 +578,12 @@ class SynthDriver(SynthDriver):
                 for voiceID, voiceName in self.__voices.items())
 
     def _get_voice(self):
-        log.info("H2R get_voice")
+        # log.info("H2R get_voice")
         curr_voice = _H2R_NG_Speak.getCurrentVoice()
         return curr_voice if curr_voice else _H2R_NG_Speak.EN_VOICE_ALOK
 
     def _set_voice(self, identifier):
-        log.info(f"H2R _set_voice: {identifier}")
+        # log.info(f"H2R _set_voice: {identifier}")
 
         if len(self.__voices) < 2:
             _H2R_NG_Speak.setVoiceByLanguage("en")

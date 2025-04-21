@@ -356,11 +356,18 @@ def set_player():
         if player:
             player.close()
         curr_qual = qual
+        
+        # Compatibility for NVDA version < 2025.1
+        try:
+            audioDevice = config.conf["audio"]["outputDevice"]
+        except:
+            audioDevice = config.conf["speech"]["outputDevice"]
+
         player = nvwave.WavePlayer(channels=1,
                             samplesPerSec=qual_to_hz[qual],
                             bitsPerSample=16,
-                            outputDevice=config.conf["speech"]["outputDevice"],
-                            buffered=True)
+                            outputDevice=audioDevice)#,
+                            # buffered=True) deprecated, removed 2025.1
 
 
 def _setVoiceByIdentifier(voiceID):    
