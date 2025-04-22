@@ -191,8 +191,8 @@ class SynthDriver(SynthDriver):
         })
 
     def _get_language(self):
-        # lang = _H2R_NG_Speak.getCurrentVoice().split("-")[0].split("_")[0]
-        lang = "en"
+        lang = _H2R_NG_Speak.getCurrentVoice().split("-")[0].split("_")[0]
+        # lang = "en"
         return lang
 
     def speak(self, speechSequence: SpeechSequence):
@@ -568,13 +568,12 @@ class SynthDriver(SynthDriver):
         amplitude = volume        
 
     def _getAvailableVoices(self):
-        # return OrderedDict((voiceID,VoiceInfo(voiceID,voiceName,voiceID.split("-")[0].split("_")[0]))
-        #         for voiceID, voiceName in self.__voices.items())
-
         if not self.__voices:
             self.__voices = populateVoices()
 
-        return OrderedDict((voiceID,VoiceInfo(voiceID,voiceName,"en"))
+        # return OrderedDict((voiceID,VoiceInfo(voiceID,voiceName,"en"))
+        #         for voiceID, voiceName in self.__voices.items())
+        return OrderedDict((voiceID,VoiceInfo(voiceID,voiceName,voiceID.split("-")[0].split("_")[0]))
                 for voiceID, voiceName in self.__voices.items())
 
     def _get_voice(self):
