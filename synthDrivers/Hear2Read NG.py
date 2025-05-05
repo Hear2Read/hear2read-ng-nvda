@@ -181,6 +181,8 @@ class SynthDriver(SynthDriver):
                 
             digit_offset = _H2R_NG_Speak.digit_offsets.get(self._get_language(), 0)
             text = ''.join([chr(ord(x) + digit_offset) if 48 <= ord(x) <= 58 else x for x in text])
+
+            text = text.rstrip() # strip trailing space, required for char mode on conjuncts
         
         # copied from the espeak addon: 
         # https://github.com/jcsteh/nvda/blob/aa5b4a0d05f6c258ada2dec7768c2d34e8910a0d/source/synthDrivers/espeak.py

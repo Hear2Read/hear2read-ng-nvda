@@ -109,7 +109,7 @@ def getCurrentVoice():
         return None
         
 def setCurrentVoice(voiceID):
-    log.info(f"H2R setCurrentVoice: {voiceID}")
+    # log.info(f"H2R setCurrentVoice: {voiceID}")
     global curr_voice
     curr_voice = voiceID
 
