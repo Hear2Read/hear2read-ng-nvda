@@ -13,14 +13,26 @@
 from threading import Thread
 from urllib import request
 
+import api
+import braille
+import controlTypes
 import core
+import globalCommands
 import globalPluginHandler
 import gui
+import inputCore
 import queueHandler
+import scriptHandler
+import speech
+import textInfos
+import treeInterceptorHandler
+import ui
 import wx
 from gui.message import DisplayableError
 from logHandler import log
+from scriptHandler import script
 from synthDriverHandler import findAndSetNextSynth, getSynth, synthChanged
+from utils.security import objectBelowLockScreenAndWindowsIsLocked
 
 from globalPlugins.hear2readng_global_plugin.english_settings import (
     EnglishSpeechSettingsDialog,
@@ -32,12 +44,16 @@ from globalPlugins.hear2readng_global_plugin.utils import (
 from globalPlugins.hear2readng_global_plugin.voice_manager import (
     Hear2ReadNGVoiceManagerDialog,
 )
+from synthDrivers._H2R_NG_Speak import getCurrentVoice
 
 # from .voice_manager import Hear2ReadNGVoiceManagerDialog
+SCRCAT_TEXTREVIEW = _("Text review")
 
+curr_synth_name = ""
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     def __init__(self, *args, **kwargs):
+        global curr_synth_name
         super().__init__(*args, **kwargs)
         self.__voice_manager_shown = False
         curr_synth_name = getSynth().name
@@ -70,9 +86,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             self.eng_settings_active = True
         
         synthChanged.register(self.on_synth_changed)
-            
+
     def on_synth_changed(self, synth):
-        if "Hear2Read NG" in synth.name:
+        global curr_synth_name
+        curr_synth_name = synth.name
+        if "Hear2Read NG" in curr_synth_name:
             # self.eng_settings_id = wx.Window.NewControlId()
             self.make_eng_settings_menu()
             self.eng_settings_active = True
@@ -219,3 +237,229 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             gui.mainFrame.sysTrayIcon.menu.DestroyItem(self.itemHandle)
         except:
             pass
+        
+
+    ############################################################################
+    # Scripts to enable spelling clarification
+    # These scripts override native NVDA gestures, and care has been taken that
+    # the fuctionality isn't affected outside of the Hear2Read addon and TTS
+    ############################################################################
+    
+    @script(
+        description=_(
+            # Translators: Input help mode message for report current character under review cursor command.
+            "Reports the character of the current navigator object where the review cursor is situated. "
+            "Pressing twice reports a description or example of that character. "
+            "Pressing three times reports the numeric value of the character in decimal and hexadecimal",
+        ),
+        category=globalCommands.SCRCAT_TEXTREVIEW,
+        gestures=("kb:numpad2", "kb(laptop):NVDA+."),
+        speakOnDemand=True,
+    )
+    def script_h2r_review_currentCharacter(self, gesture: inputCore.InputGesture):
+        
+        if "Hear2Read NG" not in curr_synth_name:
+            globalCommands.commands.script_review_currentCharacter(gesture)
+            return
+
+        info = api.getReviewPosition().copy()
+        # This script is available on the lock screen via getSafeScripts, as such
+        # ensure the review position does not contain secure information
+        # before announcing this object
+        if objectBelowLockScreenAndWindowsIsLocked(info.obj):
+            ui.reviewMessage(gui.blockAction.Context.WINDOWS_LOCKED.translatedMessage)
+            return
+
+        info.expand(textInfos.UNIT_CHARACTER)
+        scriptCount = scriptHandler.getLastScriptRepeatCount()
+        log.info(f"script_review_currentCharacter interrupt: {scriptCount}, info: {info.text}")
+        
+        if scriptCount == 1:
+            try:
+                lang = getCurrentVoice().split("-")[0]
+                # Explicitly tether here
+                braille.handler.handleReviewMove(shouldAutoTether=True)
+                speech.speakSpelling(info.text, locale=lang, useCharacterDescriptions=True)
+            except:
+                globalCommands.commands.script_review_currentCharacter(gesture)
+        else:
+            globalCommands.commands.script_review_currentCharacter(gesture)
+
+    
+    @script(
+        description=_(
+            # Translators: Input help mode message for report current word under review cursor command.
+            "Speaks the word of the current navigator object where the review cursor is situated. "
+            "Pressing twice spells the word. "
+            "Pressing three times spells the word using character descriptions",
+        ),
+        category=globalCommands.SCRCAT_TEXTREVIEW,
+        gestures=("kb:numpad5", "kb(laptop):NVDA+control+.", "ts(text):hoverUp"),
+        speakOnDemand=True,
+    )
+    def script_h2r_review_currentWord(self, gesture: inputCore.InputGesture):
+
+        if "Hear2Read NG" not in curr_synth_name:
+            globalCommands.commands.script_review_currentWord(gesture)
+            return
+        
+        info = api.getReviewPosition().copy()
+        # This script is available on the lock screen via getSafeScripts, as such
+        # ensure the review position does not contain secure information
+        # before announcing this object
+        if objectBelowLockScreenAndWindowsIsLocked(info.obj):
+            ui.reviewMessage(gui.blockAction.Context.WINDOWS_LOCKED.translatedMessage)
+            return
+
+        info.expand(textInfos.UNIT_WORD)
+        # Explicitly tether here
+        braille.handler.handleReviewMove(shouldAutoTether=True)
+        scriptCount = scriptHandler.getLastScriptRepeatCount()
+        if scriptCount == 0:
+            speech.speakTextInfo(info, reason=controlTypes.OutputReason.CARET, unit=textInfos.UNIT_WORD)
+        elif scriptCount == 1:
+            speech.spellTextInfo(info, useCharacterDescriptions=False)
+        else:
+            try:
+                lang = getCurrentVoice().split("-")[0]
+                speech.speakSpelling(info.text, locale=lang, useCharacterDescriptions=True)
+            except:
+                speech.speakSpelling(info.text, useCharacterDescriptions=True)
+
+    @script(
+        description=_(
+            # Translators: Input help mode message for read current line under review cursor command.
+            "Reports the line of the current navigator object where the review cursor is situated. "
+            "If this key is pressed twice, the current line will be spelled. "
+            "Pressing three times will spell the line using character descriptions.",
+        ),
+        category=globalCommands.SCRCAT_TEXTREVIEW,
+        gestures=("kb:numpad8", "kb(laptop):NVDA+shift+."),
+        speakOnDemand=True,
+    )
+    def script_h2r_review_currentLine(self, gesture: inputCore.InputGesture):
+
+        if "Hear2Read NG" not in curr_synth_name:
+            globalCommands.commands.script_review_currentLine(gesture)
+            return
+        
+        info = api.getReviewPosition().copy()
+        # This script is available on the lock screen via getSafeScripts, as such
+        # ensure the review position does not contain secure information
+        # before announcing this object
+        if objectBelowLockScreenAndWindowsIsLocked(info.obj):
+            ui.reviewMessage(gui.blockAction.Context.WINDOWS_LOCKED.translatedMessage)
+            return
+        info.expand(textInfos.UNIT_LINE)
+        # Explicitly tether here
+        braille.handler.handleReviewMove(shouldAutoTether=True)
+        scriptCount = scriptHandler.getLastScriptRepeatCount()
+        if scriptCount == 0:
+            speech.speakTextInfo(info, unit=textInfos.UNIT_LINE, reason=controlTypes.OutputReason.CARET)
+        elif scriptCount == 1:
+            speech.spellTextInfo(info, useCharacterDescriptions=False)
+        else:
+            try:
+                lang = getCurrentVoice().split("-")[0]
+                speech.speakSpelling(info.text, locale=lang, useCharacterDescriptions=True)
+            except:
+                speech.speakSpelling(info.text, useCharacterDescriptions=True)
+
+    @script(
+        description=_(
+            # Translators: Input help mode message for report current line command.
+            "Reports the current line under the application cursor. "
+            "Pressing this key twice will spell the current line. "
+            "Pressing three times will spell the line using character descriptions.",
+        ),
+        category=globalCommands.SCRCAT_SYSTEMCARET,
+        gestures=("kb(desktop):NVDA+upArrow", "kb(laptop):NVDA+l"),
+        speakOnDemand=True,
+    )
+    def script_h2r_reportCurrentLine(self, gesture):
+        if "Hear2Read NG" not in curr_synth_name:
+            globalCommands.commands.script_reportCurrentLine(gesture)
+            return
+        
+        obj = api.getFocusObject()
+        treeInterceptor = obj.treeInterceptor
+        if (
+            isinstance(treeInterceptor, treeInterceptorHandler.DocumentTreeInterceptor)
+            and not treeInterceptor.passThrough
+        ):
+            obj = treeInterceptor
+        try:
+            info = obj.makeTextInfo(textInfos.POSITION_CARET)
+        except (NotImplementedError, RuntimeError):
+            info = obj.makeTextInfo(textInfos.POSITION_FIRST)
+        info.expand(textInfos.UNIT_LINE)
+        scriptCount = scriptHandler.getLastScriptRepeatCount()
+        if scriptCount == 0:
+            speech.speakTextInfo(info, unit=textInfos.UNIT_LINE, reason=controlTypes.OutputReason.CARET)
+        elif scriptCount == 1:
+            speech.spellTextInfo(info, useCharacterDescriptions=False)
+        else:
+            try:
+                lang = getCurrentVoice().split("-")[0]
+                speech.speakSpelling(info.text, locale=lang, useCharacterDescriptions=True)
+            except:
+                speech.speakSpelling(info.text, useCharacterDescriptions=True)
+        
+    @script(
+        description=_(
+            # Translators: Input help mode message for report current selection command.
+            "Announces the current selection in edit controls and documents. "
+            "Pressing twice spells this information. "
+            "Pressing three times spells it using character descriptions. "
+            "Pressing four times shows it in a browsable message. ",
+        ),
+        category=globalCommands.SCRCAT_SYSTEMCARET,
+        gestures=("kb(desktop):NVDA+shift+upArrow", "kb(laptop):NVDA+shift+s"),
+        speakOnDemand=True,
+    )
+    def script_h2r_reportCurrentSelection(self, gesture):
+        if "Hear2Read NG" not in curr_synth_name:
+            globalCommands.commands.script_reportCurrentSelection(gesture)
+            return
+        
+        obj = api.getFocusObject()
+        treeInterceptor = obj.treeInterceptor
+        if (
+            isinstance(treeInterceptor, treeInterceptorHandler.DocumentTreeInterceptor)
+            and not treeInterceptor.passThrough
+        ):
+            obj = treeInterceptor
+        try:
+            info = obj.makeTextInfo(textInfos.POSITION_SELECTION)
+        except (RuntimeError, NotImplementedError):
+            info = None
+        if not info or info.isCollapsed:
+            # Translators: The message reported when there is no selection
+            ui.message(_("No selection"))
+        else:
+            scriptCount = scriptHandler.getLastScriptRepeatCount()
+            # Translators: The message reported after selected text
+            selectMessage = speech.speech._getSelectionMessageSpeech(_("%s selected"), info.text)[0]
+            if scriptCount == 0:
+                speech.speakTextSelected(info.text)
+                braille.handler.message(selectMessage)
+            elif scriptCount == 3:
+                ui.browseableMessage(info.text, copyButton=True, closeButton=True)
+                return
+
+            elif len(info.text) < speech.speech.MAX_LENGTH_FOR_SELECTION_REPORTING:
+                if scriptCount == 1:
+                    speech.speakSpelling(info.text, useCharacterDescriptions=False)
+                else:
+                    try:
+                        lang = getCurrentVoice().split("-")[0]
+                        speech.speakSpelling(info.text, locale=lang, useCharacterDescriptions=True)
+                    except:
+                        speech.speakSpelling(info.text, useCharacterDescriptions=True)
+            else:
+                speech.speakTextSelected(info.text)
+                braille.handler.message(selectMessage)
+
+    ############################################################################
+    # end of scripts section
+    ############################################################################

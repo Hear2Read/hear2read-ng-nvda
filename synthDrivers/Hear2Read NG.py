@@ -193,8 +193,8 @@ class SynthDriver(SynthDriver):
         })
 
     def _get_language(self):
-        lang = _H2R_NG_Speak.getCurrentVoice().split("-")[0].split("_")[0]
-        # lang = "en"
+        # lang = _H2R_NG_Speak.getCurrentVoice().split("-")[0].split("_")[0]
+        lang = "en"
         return lang
 
     def speak(self, speechSequence: SpeechSequence):
