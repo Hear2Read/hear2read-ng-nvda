@@ -15,6 +15,7 @@ from urllib import request
 
 import api
 import braille
+import config
 import controlTypes
 import core
 import globalCommands
@@ -37,9 +38,11 @@ from utils.security import objectBelowLockScreenAndWindowsIsLocked
 from globalPlugins.hear2readng_global_plugin.english_settings import (
     EnglishSpeechSettingsDialog,
 )
-from globalPlugins.hear2readng_global_plugin.utils import (
+from globalPlugins.hear2readng_global_plugin.h2rutils import (
     H2RNG_VOICE_LIST_URL,
+    _StartupInfoDialog,
     parse_server_voices,
+    postUpdateCheck,
 )
 from globalPlugins.hear2readng_global_plugin.voice_manager import (
     Hear2ReadNGVoiceManagerDialog,
@@ -50,15 +53,32 @@ from synthDrivers._H2R_NG_Speak import getCurrentVoice
 SCRCAT_TEXTREVIEW = _("Text review")
 
 curr_synth_name = ""
+showNewUserMessage = True
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     def __init__(self, *args, **kwargs):
-        global curr_synth_name
+        global curr_synth_name, showNewUserMessage
         super().__init__(*args, **kwargs)
         self.__voice_manager_shown = False
+        try:
+            showNewUserMessage = config.conf["hear2read"]["showStartupMsg"]
+        except KeyError as e:
+            confspec = {
+                "engSynth": "string(default='oneCore')",
+                "engVoice": "string(default='')",
+                "engVariant": "string(default='')",
+                "engRate": "integer(default=50)",
+                "engPitch": "integer(default=50)",
+                "engVolume": "integer(default=100)",
+                "engInflection": "integer(default=80)",
+                "showStartupMsg": "boolean(default=True)"
+            }
+            config.conf.spec["hear2read"] = confspec
+            showNewUserMessage = True
+
         curr_synth_name = getSynth().name
         self._voice_checker = lambda: wx.CallLater(2000, 
-                                                    self._perform_checks)
+                                                    self._startup)
         core.postNvdaStartup.register(self._voice_checker)
 
         # if "Hear2Read NG" not in curr_synth_name:
@@ -180,8 +200,21 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                 wx.YES_NO | wx.ICON_INFORMATION,):
             wx.CallAfter(self.on_manager)
 
+    def _startup(self):
+        if showNewUserMessage:
+            log.info("_start_checks: showNewUserMessage")
+            startupdialog = _StartupInfoDialog()
+            gui.runScriptModalDialog(startupdialog,
+                                     callback=self._on_startupinfo_closed)
+        else:
+            self._perform_checks()
+
+    def _on_startupinfo_closed(self, res):
+        self._perform_checks()
+
     def _perform_checks(self):
-        
+        log.info("_perform_checks")
+        postUpdateCheck()
         self._perform_voice_check()
         
         if self.__voice_manager_shown:

@@ -20,7 +20,7 @@ from logHandler import log
 
 from synthDrivers._H2R_NG_Speak import H2RNG_DATA_DIR, H2RNG_VOICES_DIR
 
-from .utils import (
+from .h2rutils import (
     # H2RNG_DATA_DIR,
     H2RNG_VOICE_LIST_URL,
     # H2RNG_VOICES_DIR,

@@ -5,6 +5,7 @@
 
 import os
 import queue
+import shutil
 import threading
 from collections import OrderedDict
 from ctypes import (
@@ -652,7 +653,7 @@ def checkIfUpdates():
     update_thread = threading.Thread(target=_checkIfUpdates)
     update_thread.daemon = True
     update_thread.start()
-    
+
 def H2R_Speak_errcheck(res, func, args):
     if res != EE_OK:
         raise RuntimeError("%s: code %d" % (func.__name__, res))
@@ -665,7 +666,7 @@ def initialize(idxCallback=None):
         the number of the index or C{None} when speech stops.
     """
     global H2RNG_SpeakDLL, bgThread, bgQueue, onIndexReached#, i, libc
-    
+
     H2RNG_SpeakDLL = cdll.LoadLibrary(H2RNG_ENGINE_DLL_PATH)
 
     H2RNG_SpeakDLL.H2R_Speak_init.argtypes=[c_char_p,Callbacks]

@@ -9,8 +9,17 @@ import urllib.request
 from dataclasses import dataclass
 from threading import Thread
 
+import config
 import gui
+import windowUtils
 import wx
+from gui.contextHelp import ContextHelpMixin
+from gui.guiHelper import (
+    BORDER_FOR_DIALOGS,
+    SPACE_BETWEEN_VERTICAL_DIALOG_ITEMS,
+    BoxSizerHelper,
+    ButtonHelper,
+)
 from logHandler import log
 
 from synthDrivers._H2R_NG_Speak import (
@@ -50,6 +59,7 @@ H2RNG_VOICES_DOWNLOAD_HTTP = "https://hear2read.org/Hear2Read/voices-piper/"
 # voice list URL
 H2RNG_VOICE_LIST_URL = "https://hear2read.org/nvda-addon/getH2RNGVoiceNames.php"
 # H2RNG_VOICE_LIST_URL = "https://hear2read.org/nvda-addon/getH2RNG2VoiceNames.php"
+H2RNG_UPDATE_FLAG = os.path.join(H2RNG_DATA_DIR, "pendingUpdate")
 
 try:
     _dir=os.path.dirname(__file__.decode("mbcs"))
@@ -96,6 +106,16 @@ def copytree_overwrite(src, dst):
     else:
         copytree_compat(src=src, dst=dst)
 
+def postUpdateCheck():
+    """Check if Hear2Read is being run post addon update, and rename the 
+    updated dll file
+    """
+    h2r_dll_update_file = H2RNG_ENGINE_DLL_PATH+".update"
+    try:
+        log.info("Hear2Read update from postUpdateCheck")
+        shutil.move(h2r_dll_update_file, H2RNG_ENGINE_DLL_PATH)
+    except FileNotFoundError:
+        log.info("Not post update, doing nothing")
 
 def check_files():
     """
@@ -109,6 +129,8 @@ def check_files():
     # dll_is_present = False
     # phonedir_is_present = False
     # voice_is_present = False
+
+    postUpdateCheck()
 
     try:
         if not os.path.isfile(H2RNG_ENGINE_DLL_PATH):
@@ -258,20 +280,50 @@ def onInstall():
     @rtype: bool
     """
     # log.info("onInstall from manager")
-
     src_dir = os.path.join(_dir, "res")
+    dll_name = "Hear2ReadNG_addon_engine.dll"
+
+    # First check that the dll file is not in access, i.e., Hear2Read Indic is not
+    # the current TTS synth
+    if os.path.isdir(H2RNG_DATA_DIR):
+        try:
+            # trying moving the dll first
+            shutil.move(os.path.join(src_dir, dll_name), 
+                        os.path.join(H2RNG_DATA_DIR, dll_name))
+            
+            # if the data dir is already present, need to take further steps:
+            # touch a file called update flag. This is to ensure proper update 
+            # behaviour in NVDA - NVDA runs onUninstall when updating, deleting
+            # old voices
+            with open(H2RNG_UPDATE_FLAG, 'a'):
+                os.utime(H2RNG_UPDATE_FLAG, None)
+        except Exception as e:
+            if dll_name in str(e):
+                shutil.move(os.path.join(src_dir, dll_name), 
+                        os.path.join(H2RNG_DATA_DIR, dll_name+".update"))
+                with open(H2RNG_UPDATE_FLAG, 'a'):
+                    os.utime(H2RNG_UPDATE_FLAG, None)
+                # gui.messageBox(
+                #     # Translators: message telling the user that Hear2Read Indic was not installed correctly
+                #     _("Unable to update Hear2Read Indic while it is running in NVDA\n"
+                #         "Please switch to a different synthesizer, restart NVDA and retry"),
+                #     # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
+                #     _("Hear2Read Indic Install Error"),
+                #     wx.OK | wx.ICON_ERROR)
+                # raise e
+            else:
+                log.warn("Unable to update Hear2Read properly. Old voices may be deleted")
 
     try:
         copytree_overwrite(src=src_dir, dst=H2RNG_DATA_DIR)
         shutil.rmtree(src_dir)
     except Exception as e:
         log.warn(f"Error installing Hear2Read Indic data files: {e}")
-        if "Hear2ReadNG_addon_engine.dll" in str(e):
+        if dll_name in str(e):
             gui.messageBox(
                 # Translators: message telling the user that Hear2Read Indic was not installed correctly
                 _("Unable to update Hear2Read Indic while it is running in NVDA\n"
-                    "Please switch to a different synthesizer, restart NVDA "
-                    "and retry"),
+                    "Please switch to a different synthesizer, restart NVDA and retry"),
                 # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
                 _("Hear2Read Indic Install Error"),
                 wx.OK | wx.ICON_ERROR)
@@ -286,7 +338,7 @@ def onInstall():
                 log.warn(f"Hear2Read Indic unable to remove file from addon dir: "
                          f"{file}, Exception: {e}")
 
-    return move_old_voices()
+    move_old_voices()
 
 @dataclass
 class Voice:
@@ -371,3 +423,70 @@ class DownloadThread(Thread):
     def cancel(self):
         self.cancel_event.set() 
 
+
+class _StartupInfoDialog(
+	ContextHelpMixin,
+	wx.Dialog  # wxPython does not seem to call base class initializer, put last in MRO
+):
+	"""A dialog informing the user of the changes to Hear2Read regarding English
+    being spoken using a different synthesizer.
+    This code has been scavenged and modified from NVDA, from 
+    gui.addonStoreGui.messageDialogs._SafetyWarningDialog"""
+
+	helpId = "H2RStartup"
+
+	def __init__(self, parent=gui.mainFrame):
+		# Translators: The warning of a dialog
+		super().__init__(parent, title="Hear2Read Update Info")
+		mainSizer = wx.BoxSizer(wx.VERTICAL)
+		sHelper = BoxSizerHelper(self, orientation=wx.VERTICAL)
+
+		_infoText = _(
+			# Translators: Info that is displayed when Hear2Read is started.
+			"Hear2Read has introduced a major change with this update. English "
+			"will now be spoken using a different synthesizer, with the default"
+			" being OneCore. This can be changed in the Hear2Read English voice"
+			" settings option in the NVDA menu (NVDA+n). \n\n"
+            "Additionally, the English voice settings like speed and volume "
+            "can be changed independently while using Hear2Read TTS by changing"
+            " the voice to English and then changing the rate of speech or the "
+            "volume. \n\n"
+            "This change has been made to improve navigation in Windows by "
+            "using an alternative TTS for English, which has quicker response "
+            "times."
+		)
+
+		sText = sHelper.addItem(wx.StaticText(self, label=_infoText))
+		# the wx.Window must be constructed before we can get the handle.
+		self.scaleFactor = windowUtils.getWindowScalingFactor(self.GetHandle())
+		sText.Wrap(
+			# 600 was fairly arbitrarily chosen by a visual user to look acceptable on their machine.
+			self.scaleFactor * 600,
+		)
+
+		sHelper.sizer.AddSpacer(SPACE_BETWEEN_VERTICAL_DIALOG_ITEMS)
+
+		self.dontShowAgainCheckbox = sHelper.addItem(
+			wx.CheckBox(
+				self,
+				label=_(
+					# Translators: The label of a checkbox in the startup info dialog
+					"&Don't show this message again"
+				),
+			),
+		)
+
+		bHelper = sHelper.addDialogDismissButtons(ButtonHelper(wx.HORIZONTAL))
+
+		# Translators: The label of a button in a dialog
+		okButton = bHelper.addButton(self, wx.ID_OK, label=_("&OK"))
+		okButton.Bind(wx.EVT_BUTTON, self.onOkButton)
+
+		mainSizer.Add(sHelper.sizer, border=BORDER_FOR_DIALOGS, flag=wx.ALL)
+		self.Sizer = mainSizer
+		mainSizer.Fit(self)
+		self.CentreOnScreen()
+
+	def onOkButton(self, evt: wx.CommandEvent):
+		config.conf["hear2read"]["showStartupMsg"] = not self.dontShowAgainCheckbox.GetValue()
+		self.EndModal(wx.ID_OK)

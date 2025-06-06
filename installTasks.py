@@ -16,6 +16,7 @@ H2RNG_DATA_DIR = os.path.join(os.getenv("APPDATA"), "Hear2Read-NG")
 H2RNG_VOICES_DIR = os.path.join(H2RNG_DATA_DIR, "Voices")
 H2RNG_WAVS_DIR = os.path.join(H2RNG_DATA_DIR, "wavs")
 H2RNG_UPDATE_FLAG = os.path.join(H2RNG_DATA_DIR, "pendingUpdate")
+H2RNG_ENGINE_DLL_PATH = os.path.join(H2RNG_DATA_DIR, "Hear2ReadNG_addon_engine.dll")
 
 try:
     _dir=os.path.dirname(__file__.decode("mbcs"))
@@ -129,15 +130,19 @@ def onInstall():
             with open(H2RNG_UPDATE_FLAG, 'a'):
                 os.utime(H2RNG_UPDATE_FLAG, None)
         except Exception as e:
-            if "Hear2ReadNG_addon_engine.dll" in str(e):
-                gui.messageBox(
-                    # Translators: message telling the user that Hear2Read Indic was not installed correctly
-                    _("Unable to update Hear2Read Indic while it is running in NVDA\n"
-                        "Please switch to a different synthesizer, restart NVDA and retry"),
-                    # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
-                    _("Hear2Read Indic Install Error"),
-                    wx.OK | wx.ICON_ERROR)
-                raise e
+            if dll_name in str(e):
+                shutil.move(os.path.join(src_dir, dll_name), 
+                        os.path.join(H2RNG_DATA_DIR, dll_name+".update"))
+                with open(H2RNG_UPDATE_FLAG, 'a'):
+                    os.utime(H2RNG_UPDATE_FLAG, None)
+                # gui.messageBox(
+                #     # Translators: message telling the user that Hear2Read Indic was not installed correctly
+                #     _("Unable to update Hear2Read Indic while it is running in NVDA\n"
+                #         "Please switch to a different synthesizer, restart NVDA and retry"),
+                #     # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
+                #     _("Hear2Read Indic Install Error"),
+                #     wx.OK | wx.ICON_ERROR)
+                # raise e
             else:
                 log.warn("Unable to update Hear2Read properly. Old voices may be deleted")
 
@@ -146,7 +151,7 @@ def onInstall():
         shutil.rmtree(src_dir)
     except Exception as e:
         log.warn(f"Error installing Hear2Read Indic data files: {e}")
-        if "Hear2ReadNG_addon_engine.dll" in str(e):
+        if dll_name in str(e):
             gui.messageBox(
                 # Translators: message telling the user that Hear2Read Indic was not installed correctly
                 _("Unable to update Hear2Read Indic while it is running in NVDA\n"
@@ -175,6 +180,12 @@ def onUninstall():
             # subsequently
             os.remove(H2RNG_UPDATE_FLAG)
             log.info("Hear2Read update. Ignoring uninstall tasks")
+            h2r_dll_update_file = H2RNG_ENGINE_DLL_PATH+".update"
+            try:
+                log.info("Hear2Read update from onUninstall")
+                shutil.move(h2r_dll_update_file, H2RNG_ENGINE_DLL_PATH)
+            except FileNotFoundError:
+                log.info("Not post update, doing nothing")
             return
         shutil.rmtree(H2RNG_DATA_DIR)
     except Exception as e:

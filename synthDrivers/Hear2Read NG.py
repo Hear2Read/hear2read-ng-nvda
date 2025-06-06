@@ -35,7 +35,7 @@ from synthDriverHandler import (
     synthIndexReached,
 )
 
-from globalPlugins.hear2readng_global_plugin.utils import (
+from globalPlugins.hear2readng_global_plugin.h2rutils import (
     check_files,
     lang_names,
     populateVoices,
@@ -130,7 +130,9 @@ class SynthDriver(SynthDriver):
             "engPitch": "integer(default=50)",
             "engVolume": "integer(default=100)",
             "engInflection": "integer(default=80)",
+            "showStartupMsg": "boolean(default=True)"
         }
+        
         config.conf.spec["hear2read"] = confspec
 
         # Have H2R pitch be set to the engsynth value to allow PitchCommand
