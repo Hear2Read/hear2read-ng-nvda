@@ -5,7 +5,8 @@
 
 import os
 import queue
-import shutil
+
+# import shutil
 import threading
 from collections import OrderedDict
 from ctypes import (
@@ -29,6 +30,24 @@ import wx
 from logHandler import log
 from synthDriverHandler import changeVoice, getSynthInstance
 
+from globalPlugins.hear2readng_global_plugin.file_utils import (
+    EN_VOICE_ALOK,
+    H2RNG_DATA_DIR,
+    H2RNG_ENGINE_DLL_PATH,
+    H2RNG_VOICES_DIR,
+)
+from globalPlugins.hear2readng_global_plugin.h2rutils import (
+    ID_EnglishSynthInflection,
+    ID_EnglishSynthName,
+    ID_EnglishSynthPitch,
+    ID_EnglishSynthRate,
+    ID_EnglishSynthVariant,
+    ID_EnglishSynthVoice,
+    ID_EnglishSynthVolume,
+    SCT_EngSynth,
+    _h2r_config,
+)
+
 # from globalPlugins.hear2readng_global_plugin.utils import (
 #     EN_VOICE_ALOK,
 #     H2RNG_DATA_DIR,
@@ -38,12 +57,31 @@ from synthDriverHandler import changeVoice, getSynthInstance
 #     H2RNG_WAVS_DIR,
 # )
 
-H2RNG_DATA_DIR = os.path.join(os.getenv("APPDATA"), "Hear2Read-NG")
-H2RNG_PHONEME_DIR = os.path.join(H2RNG_DATA_DIR, "espeak-ng-data")
-H2RNG_ENGINE_DLL_PATH = os.path.join(H2RNG_DATA_DIR, "Hear2ReadNG_addon_engine.dll")
-H2RNG_VOICES_DIR = os.path.join(H2RNG_DATA_DIR, "Voices")
-H2RNG_WAVS_DIR = os.path.join(H2RNG_DATA_DIR, "wavs")
-EN_VOICE_ALOK = "en_US-arctic-medium"
+# H2RNG_DATA_DIR = os.path.join(os.getenv("APPDATA"), "Hear2Read-NG")
+# H2RNG_PHONEME_DIR = os.path.join(H2RNG_DATA_DIR, "espeak-ng-data")
+# H2RNG_ENGINE_DLL_PATH = os.path.join(H2RNG_DATA_DIR, "Hear2ReadNG_addon_engine.dll")
+# H2RNG_VOICES_DIR = os.path.join(H2RNG_DATA_DIR, "Voices")
+# H2RNG_WAVS_DIR = os.path.join(H2RNG_DATA_DIR, "wavs")
+# EN_VOICE_ALOK = "en_US-arctic-medium"
+
+# try:
+#     _h2r_config = config.conf["hear2read"]
+# except KeyError:
+#     confspec = {
+#         "engSynth": "string(default='oneCore')",
+#         "engVoice": "string(default='')",
+#         "engVariant": "string(default='')",
+#         "engRate": "integer(default=50)",
+#         "engPitch": "integer(default=50)",
+#         "engVolume": "integer(default=100)",
+#         "engInflection": "integer(default=80)",
+#         "showStartupMsg": "boolean(default=True)"
+#     }
+    
+#     config.conf.spec["hear2read"] = confspec
+#     config.conf["hear2read"] = {}
+#     # config.conf["hear2read"].validate(config.conf.validator)
+#     _h2r_config = config.conf["hear2read"]
 
 isSpeaking = False
 onIndexReached = None
@@ -461,9 +499,9 @@ def setVoiceByLanguage(lang):
 
 def init_eng_synth(default_synth="oneCore"):
 
-    eng_synth = config.conf.get("hear2read", {}).get("engSynth", default_synth)
-    eng_voice = config.conf.get("hear2read", {}).get("engVoice", "")
-    eng_variant = config.conf.get("hear2read", {}).get("engVariant", "")
+    eng_synth = _h2r_config.get(SCT_EngSynth, {}).get(ID_EnglishSynthName, default_synth)
+    eng_voice = _h2r_config.get(SCT_EngSynth, {}).get(ID_EnglishSynthVoice, "")
+    eng_variant = _h2r_config.get(SCT_EngSynth, {}).get(ID_EnglishSynthVariant, "")
 
     # log.info(f"init_eng_synth: got synth and voice from config: {eng_synth}, {eng_voice}")
 
@@ -479,13 +517,13 @@ def init_eng_synth(default_synth="oneCore"):
         set_eng_synth_variant(eng_variant)
 
     if "pitch" in supportedSettings:
-        set_eng_synth_pitch(config.conf["hear2read"]["engPitch"])
+        set_eng_synth_pitch(_h2r_config[SCT_EngSynth][ID_EnglishSynthPitch])
     if "rate" in supportedSettings:
-        set_eng_synth_rate(config.conf["hear2read"]["engRate"])
+        set_eng_synth_rate(_h2r_config[SCT_EngSynth][ID_EnglishSynthRate])
     if "volume" in supportedSettings:
-        set_eng_synth_volume(config.conf["hear2read"]["engVolume"])
+        set_eng_synth_volume(_h2r_config[SCT_EngSynth][ID_EnglishSynthVolume])
     if "inflection" in supportedSettings:
-        set_eng_synth_inflection(config.conf["hear2read"]["engInflection"])
+        set_eng_synth_inflection(_h2r_config[SCT_EngSynth][ID_EnglishSynthInflection])
 
 
 def set_eng_synth(eng_synth):
@@ -517,8 +555,8 @@ def set_eng_synth(eng_synth):
             break
     
     EngSynth._set_voice(eng_voice)
-    # config.conf["hear2read"]["engSynth"] = EngSynth.name
-    # config.conf["hear2read"]["engVoice"] = EngSynth.voice
+    # _h2r_config[SCT_EngSynth][ID_EnglishSynthName] = EngSynth.name
+    # _h2r_config[SCT_EngSynth][ID_EnglishSynthVoice] = EngSynth.voice
     return True
 
 def get_eng_synth_voice():
@@ -537,7 +575,7 @@ def set_eng_synth_voice(voice_id):
         changeVoice(EngSynth, voice_id)
         log.info(f"2nd attempt voice changed to: {get_eng_synth_voice()}")
 
-    # config.conf["hear2read"]["engVoice"] = EngSynth.voice
+    # _h2r_config[SCT_EngSynth][ID_EnglishSynthVoice] = EngSynth.voice
 
 def get_eng_synth_variant():
     try:

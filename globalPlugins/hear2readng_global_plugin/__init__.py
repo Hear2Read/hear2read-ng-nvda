@@ -40,6 +40,9 @@ from globalPlugins.hear2readng_global_plugin.english_settings import (
 )
 from globalPlugins.hear2readng_global_plugin.h2rutils import (
     H2RNG_VOICE_LIST_URL,
+    ID_ShowStartupPopup,
+    SCT_General,
+    _h2r_config,
     _StartupInfoDialog,
     parse_server_voices,
     postUpdateCheck,
@@ -61,8 +64,9 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         super().__init__(*args, **kwargs)
         self.__voice_manager_shown = False
         try:
-            showNewUserMessage = config.conf["hear2read"]["showStartupMsg"]
+            showNewUserMessage = _h2r_config[SCT_General][ID_ShowStartupPopup]
         except KeyError as e:
+            log.error("H2R Config not loaded, this should not happen")
             confspec = {
                 "engSynth": "string(default='oneCore')",
                 "engVoice": "string(default='')",
@@ -74,6 +78,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                 "showStartupMsg": "boolean(default=True)"
             }
             config.conf.spec["hear2read"] = confspec
+            config.conf.save()
             showNewUserMessage = True
 
         curr_synth_name = getSynth().name
@@ -201,7 +206,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             wx.CallAfter(self.on_manager)
 
     def _startup(self):
-        if showNewUserMessage:
+
+        if _h2r_config[SCT_General][ID_ShowStartupPopup]:
             log.info("_start_checks: showNewUserMessage")
             startupdialog = _StartupInfoDialog()
             gui.runScriptModalDialog(startupdialog,

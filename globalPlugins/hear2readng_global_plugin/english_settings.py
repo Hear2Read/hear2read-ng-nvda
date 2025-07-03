@@ -17,7 +17,18 @@ from logHandler import log
 from synthDriverHandler import getSynthInstance, getSynthList
 from wx.lib.expando import ExpandoTextCtrl
 
+from globalPlugins.hear2readng_global_plugin.h2rutils import (
+    ID_EnglishSynthInflection,
+    ID_EnglishSynthName,
+    ID_EnglishSynthPitch,
+    ID_EnglishSynthRate,
+    ID_EnglishSynthVariant,
+    ID_EnglishSynthVoice,
+    ID_EnglishSynthVolume,
+    SCT_EngSynth,
+)
 from synthDrivers._H2R_NG_Speak import (
+    _h2r_config,
     get_eng_synth,
     get_eng_synth_desc,
     get_eng_synth_inflection,
@@ -41,34 +52,46 @@ from synthDrivers._H2R_NG_Speak import (
 # TODO? add restart NVDA dialog
 
 Eng_Synth = None
+Progress_Dialog = None
 
 def get_eng_synth_list():
     """Generates the list of available synthesizers with English voices
     """
+    global Progress_Dialog
     eng_synth_list=[]
+
     synths  = getSynthList()
-    # log.info(f"got synths: f{synths}")
+    # hack to get the ceiling of the division
+    increment = -(-100 // len(synths))
+
+    log.info(f"got synths: f{synths}")
     for synthName, synthDesc in synths:
         # don't check Hear2Read and sapi5 voices
+        log.info(f"checking synth: {synthName}")
         if ("Hear2Read" in synthName or "dual_sapi5" in synthName or 
-            get_eng_synth_name() in synthName):
+            "MultiLang" in synthName or get_eng_synth_name() in synthName):
             continue
         
         try:
             synth = getSynthInstance(synthName)
             voices = synth._get_availableVoices()
         except Exception as e:
-            log.warn(f"Unable to list voices from \"{synthName}\", skipping")
-            synth.cancel()
-            synth.terminate()
+            log.warn(f"Unable to list voices from \"{synthName}\", skipping: {e}")
+            try:
+                synth.cancel()
+                synth.terminate()
+            except:
+                log.warn("Unable to kill synth, skipping")
+                pass
             continue
         eng_voices = []
         for voice in voices.values():
-            # log.info(f"checking voice: {voice.language}, {voice.id}")
+            log.info(f"checking voice: {voice}")
+            log.info(f"checking voice: {voice.language}, {voice.id}")
             if ((voice.language and voice.language.startswith("en")) 
                 or (not voice.language 
                     and "english" in voice.displayName.lower())):
-                # log.info(f"adding voice: {voice.displayName}")
+                log.info(f"adding voice: {voice.displayName}")
                 eng_voices.append(voice)
                 break
         if eng_voices:
@@ -76,10 +99,25 @@ def get_eng_synth_list():
             # eng_voices[synthName] = eng_voices
         synth.cancel()
         synth.terminate()
-        
-    eng_synth_list.append((get_eng_synth_name(), get_eng_synth_desc()))
+        if Progress_Dialog:
+            # check increment against 100 as ceiling can exceed 100
+            continue_update,skip = Progress_Dialog.Update(min(increment, 100))
+            increment += increment
+        if not continue_update:
+            log.info("not continuing synth update on cancel")
+            eng_synth_list.append((get_eng_synth_name(), get_eng_synth_desc()))
 
+            eng_synth_list.sort(key=lambda s: strxfrm(s[1]))
+            try:
+                Progress_Dialog.Destroy()
+                Progress_Dialog = None
+            except:
+                log.info("Eng Synth progress dialog not present, skipping")
+            return eng_synth_list
+
+    eng_synth_list.append((get_eng_synth_name(), get_eng_synth_desc()))
     eng_synth_list.sort(key=lambda s: strxfrm(s[1]))
+
     return eng_synth_list
 
 class EnglishSpeechSettingsDialog(SettingsDialog):
@@ -212,6 +250,13 @@ class SynthesizerSelectionDialog(SettingsDialog):
         self.synthList.SetFocus()
 
     def updateSynthesizerList(self):
+        global Progress_Dialog
+        # Show progress dialog
+        Progress_Dialog = wx.ProgressDialog("Updating English TTS List",
+                        "Please wait...",
+                        maximum=100, parent=self,
+                        style=wx.PD_CAN_ABORT | wx.PD_AUTO_HIDE)
+        
         driverList=get_eng_synth_list()
         self.synthNames=[x[0] for x in driverList]
         options=[x[1] for x in driverList]
@@ -466,33 +511,33 @@ class VoiceSettingsPanel(SettingsPanel):
 
     def onDiscard(self):
         # log.info("onDiscard")
-        if config.conf["hear2read"]["engSynth"] != get_eng_synth_name():
-            set_eng_synth(config.conf["hear2read"]["engSynth"])
-        conf_eng_voice = config.conf["hear2read"]["engVoice"]
-        conf_eng_variant = config.conf["hear2read"]["engVariant"]
+        if _h2r_config[SCT_EngSynth][ID_EnglishSynthName] != get_eng_synth_name():
+            set_eng_synth(_h2r_config[SCT_EngSynth][ID_EnglishSynthName])
+        conf_eng_voice = _h2r_config[SCT_EngSynth][ID_EnglishSynthVoice]
+        conf_eng_variant = _h2r_config[SCT_EngSynth][ID_EnglishSynthVariant]
         # need to make sure that the English voice exists in config as default
         # value is an empty string
         if conf_eng_voice and conf_eng_voice != get_eng_synth_voice():
-            set_eng_synth_voice(config.conf["hear2read"]["engVoice"])
+            set_eng_synth_voice(_h2r_config[SCT_EngSynth][ID_EnglishSynthVoice])
         if conf_eng_variant and conf_eng_variant != get_eng_synth_variant():
-            set_eng_synth_variant(config.conf["hear2read"]["engVariant"])
-        if config.conf["hear2read"]["engRate"] != get_eng_synth_rate():
-            set_eng_synth_rate(config.conf["hear2read"]["engRate"])
-        if config.conf["hear2read"]["engPitch"] != get_eng_synth_pitch():
-            set_eng_synth_pitch(config.conf["hear2read"]["engPitch"])
-        if config.conf["hear2read"]["engVolume"] != get_eng_synth_volume():
-            set_eng_synth_volume(config.conf["hear2read"]["engVolume"])
-        if config.conf["hear2read"]["engVolume"] != get_eng_synth_inflection():
-            set_eng_synth_inflection(config.conf["hear2read"]["engInflection"])
+            set_eng_synth_variant(_h2r_config[SCT_EngSynth][ID_EnglishSynthVariant])
+        if _h2r_config[SCT_EngSynth][ID_EnglishSynthRate] != get_eng_synth_rate():
+            set_eng_synth_rate(_h2r_config[SCT_EngSynth][ID_EnglishSynthRate])
+        if _h2r_config[SCT_EngSynth][ID_EnglishSynthPitch] != get_eng_synth_pitch():
+            set_eng_synth_pitch(_h2r_config[SCT_EngSynth][ID_EnglishSynthPitch])
+        if _h2r_config[SCT_EngSynth][ID_EnglishSynthVolume] != get_eng_synth_volume():
+            set_eng_synth_volume(_h2r_config[SCT_EngSynth][ID_EnglishSynthVolume])
+        if _h2r_config[SCT_EngSynth][ID_EnglishSynthVolume] != get_eng_synth_inflection():
+            set_eng_synth_inflection(_h2r_config[SCT_EngSynth][ID_EnglishSynthInflection])
 
     def onSave(self):
         # log.info("onSave")
-        config.conf["hear2read"]["engSynth"] = get_eng_synth_name()
-        config.conf["hear2read"]["engVoice"] = get_eng_synth_voice()
-        config.conf["hear2read"]["engVariant"] = get_eng_synth_variant()
-        config.conf["hear2read"]["engRate"] = get_eng_synth_rate()
-        config.conf["hear2read"]["engPitch"] = get_eng_synth_pitch()
-        config.conf["hear2read"]["engVolume"] = get_eng_synth_volume()
-        config.conf["hear2read"]["engInflection"] = get_eng_synth_inflection()
+        _h2r_config[SCT_EngSynth][ID_EnglishSynthName] = get_eng_synth_name()
+        _h2r_config[SCT_EngSynth][ID_EnglishSynthVoice] = get_eng_synth_voice()
+        _h2r_config[SCT_EngSynth][ID_EnglishSynthVariant] = get_eng_synth_variant()
+        _h2r_config[SCT_EngSynth][ID_EnglishSynthRate] = get_eng_synth_rate()
+        _h2r_config[SCT_EngSynth][ID_EnglishSynthPitch] = get_eng_synth_pitch()
+        _h2r_config[SCT_EngSynth][ID_EnglishSynthVolume] = get_eng_synth_volume()
+        _h2r_config[SCT_EngSynth][ID_EnglishSynthInflection] = get_eng_synth_inflection()
         config.conf.save()
 

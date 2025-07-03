@@ -7,12 +7,17 @@ import shutil
 import sys
 import urllib.request
 from dataclasses import dataclass
+from io import StringIO
 from threading import Thread
 
+import addonHandler
 import config
+import globalVars
 import gui
 import windowUtils
 import wx
+from configobj import ConfigObj
+from configobj.validate import Validator
 from gui.contextHelp import ContextHelpMixin
 from gui.guiHelper import (
     BORDER_FOR_DIALOGS,
@@ -22,7 +27,7 @@ from gui.guiHelper import (
 )
 from logHandler import log
 
-from synthDrivers._H2R_NG_Speak import (
+from .file_utils import (
     EN_VOICE_ALOK,
     H2RNG_DATA_DIR,
     H2RNG_ENGINE_DLL_PATH,
@@ -53,6 +58,8 @@ lang_names = {"as":"Assamese",
                 "te":"Telugu", 
                 "en":"English"}
 
+
+_curAddon = addonHandler.getCodeAddon()
 # URL suffix for voice files
 H2RNG_VOICES_DOWNLOAD_HTTP = "https://hear2read.org/Hear2Read/voices-piper/"
 # H2RNG_VOICES_DOWNLOAD_HTTP = "https://hear2read.org/Hear2Read/voices-piper/phone_dur/"
@@ -60,6 +67,20 @@ H2RNG_VOICES_DOWNLOAD_HTTP = "https://hear2read.org/Hear2Read/voices-piper/"
 H2RNG_VOICE_LIST_URL = "https://hear2read.org/nvda-addon/getH2RNGVoiceNames.php"
 # H2RNG_VOICE_LIST_URL = "https://hear2read.org/nvda-addon/getH2RNG2VoiceNames.php"
 H2RNG_UPDATE_FLAG = os.path.join(H2RNG_DATA_DIR, "pendingUpdate")
+H2RNG_CONFIG_FILE = os.path.join(H2RNG_DATA_DIR, "h2rng.ini")
+# config section
+SCT_General = "General"
+SCT_EngSynth = "English"
+# general section items
+ID_ShowStartupPopup = "ShowStartupPopup"
+# English synth section items
+ID_EnglishSynthName = "EnglishSynthName"
+ID_EnglishSynthVoice = "EnglishSynthVoice"
+ID_EnglishSynthVariant = "EnglishSynthVariant"
+ID_EnglishSynthRate = "EnglishSynthRate"
+ID_EnglishSynthVolume = "EnglishSynthVolume"
+ID_EnglishSynthPitch = "EnglishSynthPitch"
+ID_EnglishSynthInflection = "EnglishSynthInflection"
 
 try:
     _dir=os.path.dirname(__file__.decode("mbcs"))
@@ -70,6 +91,167 @@ _dir = os.path.abspath(os.path.join(_dir, os.pardir, os.pardir))
     
 OLD_H2RNG_DATA_DIR = os.path.join(os.environ['ALLUSERSPROFILE'], 
                                   "Hear2Read-ng")
+
+# try:
+#     _h2r_config = config.conf["hear2read"]
+# except KeyError:
+#     confspec = {
+#         "engSynth": "string(default='oneCore')",
+#         "engVoice": "string(default='')",
+#         "engVariant": "string(default='')",
+#         "engRate": "integer(default=50)",
+#         "engPitch": "integer(default=50)",
+#         "engVolume": "integer(default=100)",
+#         "engInflection": "integer(default=80)",
+#         "showStartupMsg": "boolean(default=True)"
+#     }
+    
+#     config.conf.spec["hear2read"] = confspec
+#     config.conf.validate(config.conf.validator)
+#     _h2r_config = config.conf["hear2read"]
+
+class H2RConfigManager():
+    _GeneralConfSpec = """[{section}]
+    {showStartupPopup} = boolean(default=True)
+    """.format(
+        section=SCT_General,
+        showStartupPopup=ID_ShowStartupPopup)
+
+    _EngSynthConfSpec = """[{section}]
+    {englishSynthName} = string(default='oneCore')
+    {englishSynthVoice} = string(default='')
+    {englishSynthVariant} = string(default='')
+    {englishSynthRate} = integer(default=50)
+    {englishSynthVolume} = integer(default=100)
+    {englishSynthPitch} = integer(default=50)
+    {englishSynthInflection} = integer(default=80)
+    """.format(
+        section=SCT_EngSynth,
+        englishSynthName = ID_EnglishSynthName, 
+        englishSynthVoice = ID_EnglishSynthVoice,
+        englishSynthVariant = ID_EnglishSynthVariant,
+        englishSynthRate = ID_EnglishSynthRate,
+        englishSynthVolume = ID_EnglishSynthVolume,
+        englishSynthPitch = ID_EnglishSynthPitch,
+        englishSynthInflection = ID_EnglishSynthInflection)
+
+    configspec = ConfigObj(StringIO("""# addon Configuration File
+    {0}{1}""".format(_GeneralConfSpec, _EngSynthConfSpec)
+    ), list_values=False, encoding="UTF-8")
+
+    def __init__(self):
+        self.loadSettings()
+        config.post_configSave.register(self.handlePostConfigSave)
+
+    def __getitem__(self, key):
+        return self.addonConfig[key]
+
+    def __contains__(self, key):
+        return key in self.addonConfig
+
+    def get(self, key, default=None):
+        return self.addonConfig.get(key, default)
+
+    def __setitem__(self, key, val):
+        self.addonConfig[key] = val
+
+    def loadConfig(self, file):
+        config_out = ConfigObj(file,
+            configspec=self.configspec,
+            encoding='utf-8',
+            default_encoding='utf-8')
+        config_out.newlines = "\r\n"
+        # config_out._errors = []
+        val = Validator()
+        result = config_out.validate(val, copy=True, preserve_errors=True)     
+        if type(result) is not dict:
+            result = None
+        return config_out, result
+    
+    def loadSettings(self):
+        self.parse_old_config()
+        if os.path.exists(H2RNG_CONFIG_FILE):
+            # there is allready a config file
+            try:
+                h2r_config, errors = self.loadConfig(H2RNG_CONFIG_FILE)
+                if errors:
+                    e = Exception("Error parsing configuration file:\n%s" % h2r_config.errors)
+                    raise e
+            except Exception as e:
+                log.warning(e)
+                # error on reading config file, so delete it
+                os.remove(H2RNG_CONFIG_FILE)
+                log.warning(
+                    "Hear2Read Addon configuration file error: configuration reset to factory defaults")
+        if os.path.exists(H2RNG_CONFIG_FILE):
+            self.addonConfig, errors = self.loadConfig(H2RNG_CONFIG_FILE)
+            # if self.addonConfig.errors:
+            #     log.warning(self.addonConfig.errors)
+            #     log.warning(
+            #         "Hear2Read Addon configuration file error: configuration reset to factory defaults")
+            #     os.remove(H2RNG_CONFIG_FILE)
+            #     self.warnConfigurationReset()
+            #     # reset configuration to factory defaults
+            #     self.addonConfig =\
+            #         self._versionToConfiguration[self._currentConfigVersion](None)
+            #     self.addonConfig.filename = H2RNG_CONFIG_FILE
+        else:
+            # no add-on configuration file found
+            self.addonConfig, errors = self.loadConfig(None)
+            self.addonConfig.filename = H2RNG_CONFIG_FILE
+        
+        if not os.path.exists(H2RNG_CONFIG_FILE):
+            self.saveSettings(True)
+
+    def parse_old_config(self):
+        """TODO: populate config saved in beta versions 1.6 to 1.7
+        """
+        pass
+
+    def handlePostConfigSave(self):
+        self.saveSettings(True)
+
+    def canConfigurationBeSaved(self, force):
+        # Never save config or state if running securely or if running from the launcher.
+        try:
+            # for NVDA version >= 2023.2
+            from NVDAState import shouldWriteToDisk
+            writeToDisk = shouldWriteToDisk()
+        except ImportError:
+            # for NVDA version < 2023.2
+            writeToDisk = not (globalVars.appArgs.secure or globalVars.appArgs.launcher)
+        if not writeToDisk:
+            log.debug("Not writing add-on configuration, either --secure or --launcher args present")
+            return False
+        # after an add-on removing, configuration is deleted
+            # so  don't save configuration if there is no nvda restart
+        if _curAddon.isPendingRemove:
+            return False
+        # We don't save the configuration, in case the user
+            # would not have checked the "Save configuration on exit
+            # " checkbox in General settings and force is False
+        if not force and not config.conf['general']['saveConfigurationOnExit']:
+            return False
+        return True
+
+    def saveSettings(self, force=False):
+        if self.addonConfig is None:
+            return
+        if not self.canConfigurationBeSaved(force):
+            return
+        try:
+            val = Validator()
+            self.addonConfig.validate(val, copy=True)
+            self.addonConfig.write()
+            log.warning("Hear2Read: configuration saved")
+        except Exception:
+            log.warning("Hear2Read: Could not save configuration - probably read only file system")
+
+    def terminate(self):
+        self.saveSettings()
+        config.post_configSave.unregister(self.handlePostConfigSave)
+
+_h2r_config = H2RConfigManager()
 
 def copytree_compat(src, dst):
     """Copytree version with overwrite compatible for Python < 3.8. This is
@@ -111,6 +293,10 @@ def postUpdateCheck():
     updated dll file
     """
     h2r_dll_update_file = H2RNG_ENGINE_DLL_PATH+".update"
+    try:
+        os.remove(H2RNG_UPDATE_FLAG)
+    except:
+        pass
     try:
         log.info("Hear2Read update from postUpdateCheck")
         shutil.move(h2r_dll_update_file, H2RNG_ENGINE_DLL_PATH)
@@ -295,8 +481,7 @@ def onInstall():
             # touch a file called update flag. This is to ensure proper update 
             # behaviour in NVDA - NVDA runs onUninstall when updating, deleting
             # old voices
-            with open(H2RNG_UPDATE_FLAG, 'a'):
-                os.utime(H2RNG_UPDATE_FLAG, None)
+            os.remove(H2RNG_UPDATE_FLAG)
         except Exception as e:
             if dll_name in str(e):
                 shutil.move(os.path.join(src_dir, dll_name), 
@@ -421,32 +606,32 @@ class DownloadThread(Thread):
             wx.CallAfter(self.cancel_callback, error_message=str(e))
 
     def cancel(self):
-        self.cancel_event.set() 
+        self.cancel_event.set()
 
 
 class _StartupInfoDialog(
-	ContextHelpMixin,
-	wx.Dialog  # wxPython does not seem to call base class initializer, put last in MRO
+    ContextHelpMixin,
+    wx.Dialog  # wxPython does not seem to call base class initializer, put last in MRO
 ):
-	"""A dialog informing the user of the changes to Hear2Read regarding English
+    """A dialog informing the user of the changes to Hear2Read regarding English
     being spoken using a different synthesizer.
     This code has been scavenged and modified from NVDA, from 
     gui.addonStoreGui.messageDialogs._SafetyWarningDialog"""
 
-	helpId = "H2RStartup"
+    helpId = "H2RStartup"
 
-	def __init__(self, parent=gui.mainFrame):
-		# Translators: The warning of a dialog
-		super().__init__(parent, title="Hear2Read Update Info")
-		mainSizer = wx.BoxSizer(wx.VERTICAL)
-		sHelper = BoxSizerHelper(self, orientation=wx.VERTICAL)
+    def __init__(self, parent=gui.mainFrame):
+        # Translators: The warning of a dialog
+        super().__init__(parent, title="Hear2Read Update Info")
+        mainSizer = wx.BoxSizer(wx.VERTICAL)
+        sHelper = BoxSizerHelper(self, orientation=wx.VERTICAL)
 
-		_infoText = _(
-			# Translators: Info that is displayed when Hear2Read is started.
-			"Hear2Read has introduced a major change with this update. English "
-			"will now be spoken using a different synthesizer, with the default"
-			" being OneCore. This can be changed in the Hear2Read English voice"
-			" settings option in the NVDA menu (NVDA+n). \n\n"
+        _infoText = _(
+            # Translators: Info that is displayed when Hear2Read is started.
+            "Hear2Read has introduced a major change with this update. English "
+            "will now be spoken using a different synthesizer, with the default"
+            " being OneCore. This can be changed in the Hear2Read English voice"
+            " settings option in the NVDA menu (NVDA+n). \n\n"
             "Additionally, the English voice settings like speed and volume "
             "can be changed independently while using Hear2Read TTS by changing"
             " the voice to English and then changing the rate of speech or the "
@@ -454,39 +639,40 @@ class _StartupInfoDialog(
             "This change has been made to improve navigation in Windows by "
             "using an alternative TTS for English, which has quicker response "
             "times."
-		)
+        )
 
-		sText = sHelper.addItem(wx.StaticText(self, label=_infoText))
-		# the wx.Window must be constructed before we can get the handle.
-		self.scaleFactor = windowUtils.getWindowScalingFactor(self.GetHandle())
-		sText.Wrap(
-			# 600 was fairly arbitrarily chosen by a visual user to look acceptable on their machine.
-			self.scaleFactor * 600,
-		)
+        sText = sHelper.addItem(wx.StaticText(self, label=_infoText))
+        # the wx.Window must be constructed before we can get the handle.
+        self.scaleFactor = windowUtils.getWindowScalingFactor(self.GetHandle())
+        sText.Wrap(
+            # 600 was fairly arbitrarily chosen by a visual user to look acceptable on their machine.
+            self.scaleFactor * 600,
+        )
 
-		sHelper.sizer.AddSpacer(SPACE_BETWEEN_VERTICAL_DIALOG_ITEMS)
+        sHelper.sizer.AddSpacer(SPACE_BETWEEN_VERTICAL_DIALOG_ITEMS)
 
-		self.dontShowAgainCheckbox = sHelper.addItem(
-			wx.CheckBox(
-				self,
-				label=_(
-					# Translators: The label of a checkbox in the startup info dialog
-					"&Don't show this message again"
-				),
-			),
-		)
+        self.dontShowAgainCheckbox = sHelper.addItem(
+            wx.CheckBox(
+                self,
+                label=_(
+                    # Translators: The label of a checkbox in the startup info dialog
+                    "&Don't show this message again"
+                ),
+            ),
+        )
 
-		bHelper = sHelper.addDialogDismissButtons(ButtonHelper(wx.HORIZONTAL))
+        bHelper = sHelper.addDialogDismissButtons(ButtonHelper(wx.HORIZONTAL))
 
-		# Translators: The label of a button in a dialog
-		okButton = bHelper.addButton(self, wx.ID_OK, label=_("&OK"))
-		okButton.Bind(wx.EVT_BUTTON, self.onOkButton)
+        # Translators: The label of a button in a dialog
+        okButton = bHelper.addButton(self, wx.ID_OK, label=_("&OK"))
+        okButton.Bind(wx.EVT_BUTTON, self.onOkButton)
 
-		mainSizer.Add(sHelper.sizer, border=BORDER_FOR_DIALOGS, flag=wx.ALL)
-		self.Sizer = mainSizer
-		mainSizer.Fit(self)
-		self.CentreOnScreen()
+        mainSizer.Add(sHelper.sizer, border=BORDER_FOR_DIALOGS, flag=wx.ALL)
+        self.Sizer = mainSizer
+        mainSizer.Fit(self)
+        self.CentreOnScreen()
 
-	def onOkButton(self, evt: wx.CommandEvent):
-		config.conf["hear2read"]["showStartupMsg"] = not self.dontShowAgainCheckbox.GetValue()
-		self.EndModal(wx.ID_OK)
+    def onOkButton(self, evt: wx.CommandEvent):
+        _h2r_config[SCT_General][ID_ShowStartupPopup] = not self.dontShowAgainCheckbox.GetValue()
+        config.conf.save()
+        self.EndModal(wx.ID_OK)

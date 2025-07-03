@@ -173,20 +173,22 @@ def onInstall():
     move_old_voices()
 
 def onUninstall():
-    try:
-        log.info("Hear2Read Indic uninstalling...")
-        if os.path.isfile(H2RNG_UPDATE_FLAG):
-            # remove the update flag file so uninstall has the desired effect
-            # subsequently
+    log.info("Hear2Read Indic uninstalling...")
+    h2r_dll_update_file = H2RNG_ENGINE_DLL_PATH+".update"
+    if os.path.isfile(H2RNG_UPDATE_FLAG):
             os.remove(H2RNG_UPDATE_FLAG)
-            log.info("Hear2Read update. Ignoring uninstall tasks")
-            h2r_dll_update_file = H2RNG_ENGINE_DLL_PATH+".update"
-            try:
-                log.info("Hear2Read update from onUninstall")
-                shutil.move(h2r_dll_update_file, H2RNG_ENGINE_DLL_PATH)
-            except FileNotFoundError:
-                log.info("Not post update, doing nothing")
-            return
+
+    if os.path.isfile(h2r_dll_update_file):
+        # remove the update flag file so uninstall has the desired effect
+        # subsequently
+        log.info("Hear2Read update. Ignoring uninstall tasks")
+        try:
+            log.info("Hear2Read update from onUninstall")
+            shutil.move(h2r_dll_update_file, H2RNG_ENGINE_DLL_PATH)
+        except Exception as e:
+            log.error(f"Unable to install Hear2Read TTS Engine! {e}")
+        return
+    try:
         shutil.rmtree(H2RNG_DATA_DIR)
     except Exception as e:
         log.warn(f"Error removing Hear2Read Indic files on uninstall: {e}")

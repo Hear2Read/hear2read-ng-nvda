@@ -23,25 +23,26 @@ from speech.commands import (
     LangChangeCommand,
     PhonemeCommand,
     PitchCommand,
-    RateCommand,
+    # RateCommand,
     VolumeCommand,
 )
 from speech.types import SpeechSequence
 from synthDriverHandler import (
     SynthDriver,
     VoiceInfo,
-    getSynthInstance,
     synthDoneSpeaking,
     synthIndexReached,
 )
 
 from globalPlugins.hear2readng_global_plugin.h2rutils import (
+    ID_EnglishSynthPitch,
+    ID_EnglishSynthRate,
+    ID_EnglishSynthVolume,
+    SCT_EngSynth,
+    _h2r_config,
     check_files,
     lang_names,
     populateVoices,
-)
-from globalPlugins.hear2readng_global_plugin.voice_manager import (
-    Hear2ReadNGVoiceManagerDialog,
 )
 
 from . import _H2R_NG_Speak
@@ -134,12 +135,12 @@ class SynthDriver(SynthDriver):
         }
         
         config.conf.spec["hear2read"] = confspec
+        config.conf.save()
 
         # Have H2R pitch be set to the engsynth value to allow PitchCommand
         # to be used for capitals
         try:
-            config.conf["speech"][self.name]["pitch"] = config.conf[
-                                                        "hear2read"]["engPitch"]
+            config.conf["speech"][self.name]["pitch"] = _h2r_config[SCT_EngSynth][ID_EnglishSynthPitch]
         except KeyError as e:
             if self.name in str(e):
                 log.info("Hear2Read no config found, updating default config")
@@ -151,6 +152,7 @@ class SynthDriver(SynthDriver):
                     "capPitchChange": "integer(default=30)",
                 }
                 config.conf.spec["speech"][self.name] = confspec_default
+                config.conf.save()
                 
         _H2R_NG_Speak.initialize(self._onIndexReached)
 
@@ -538,14 +540,14 @@ class SynthDriver(SynthDriver):
     def _get_rate(self):
         # we use the English voice setting to set English rate and volume
         if self.is_curr_voice_eng():
-            return config.conf["hear2read"]["engRate"]
+            return _h2r_config[SCT_EngSynth][ID_EnglishSynthRate]
         return (nvdaRate)
 
     def _set_rate(self,rate):
         # we use the English voice setting to set English rate and volume
         if self.is_curr_voice_eng():
             _H2R_NG_Speak.set_eng_synth_rate(rate)
-            config.conf["hear2read"]["engRate"] = rate
+            _h2r_config[SCT_EngSynth][ID_EnglishSynthRate] = rate
             return
         # NVDA sends a rate between 0 and 100
         global nvdaRate, piperPhoneLen
@@ -554,10 +556,10 @@ class SynthDriver(SynthDriver):
         
     def _get_volume(self):
         # we use the English voice setting to set English rate and volume
-        # engvol = config.conf["hear2read"]["engVolume"]
+        # engvol = _h2r_config[SCT_EngSynth][ID_EnglishSynthVolume]
         # log.info(f"h2r _get_volume: {volume}")
         if self.is_curr_voice_eng():
-            return config.conf["hear2read"]["engVolume"]
+            return _h2r_config[SCT_EngSynth][ID_EnglishSynthVolume]
         return volume
         
     def _set_volume(self, new_volume):
@@ -565,7 +567,7 @@ class SynthDriver(SynthDriver):
 
         if self.is_curr_voice_eng():
             _H2R_NG_Speak.set_eng_synth_volume(new_volume)
-            config.conf["hear2read"]["engVolume"] = new_volume
+            _h2r_config[SCT_EngSynth][ID_EnglishSynthVolume] = new_volume
             return
         global volume, amplitude
         volume = new_volume
