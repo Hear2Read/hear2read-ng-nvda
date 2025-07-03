@@ -117,24 +117,21 @@ def onInstall():
 
     # First check that the dll file is not in access, i.e., Hear2Read Indic is not
     # the current TTS synth
-    if os.path.isdir(H2RNG_DATA_DIR):
+    if os.path.isdir(H2RNG_DATA_DIR):            
+        # if the data dir is already present, need to take further steps:
+        # touch a file called update flag. This is to ensure proper update 
+        # behaviour in NVDA - NVDA runs onUninstall when updating, deleting
+        # old voices
+        with open(H2RNG_UPDATE_FLAG, 'a'):
+            os.utime(H2RNG_UPDATE_FLAG, None)
         try:
             # trying moving the dll first
             shutil.move(os.path.join(src_dir, dll_name), 
                         os.path.join(H2RNG_DATA_DIR, dll_name))
-            
-            # if the data dir is already present, need to take further steps:
-            # touch a file called update flag. This is to ensure proper update 
-            # behaviour in NVDA - NVDA runs onUninstall when updating, deleting
-            # old voices
-            with open(H2RNG_UPDATE_FLAG, 'a'):
-                os.utime(H2RNG_UPDATE_FLAG, None)
         except Exception as e:
             if dll_name in str(e):
                 shutil.move(os.path.join(src_dir, dll_name), 
                         os.path.join(H2RNG_DATA_DIR, dll_name+".update"))
-                with open(H2RNG_UPDATE_FLAG, 'a'):
-                    os.utime(H2RNG_UPDATE_FLAG, None)
                 # gui.messageBox(
                 #     # Translators: message telling the user that Hear2Read Indic was not installed correctly
                 #     _("Unable to update Hear2Read Indic while it is running in NVDA\n"
@@ -171,6 +168,17 @@ def onInstall():
                          f"{file}, Exception: {e}")
 
     move_old_voices()
+
+    # We have renamed the addon to conform with the rule of having no spaces
+    # We will try to remove the older addon
+    old_addon_dir = os.path.join(os.path.dirname(_dir), "Hear2Read NG")
+    if os.path.isdir(old_addon_dir):
+        log.info("Found older version of Hear2ReadNG, removing the addon")
+        try:
+            shutil.rmtree(old_addon_dir)
+        except:
+            log.warn("Hear2ReadNG was unable to remove the old addon. Please "
+                     "remove manually")
 
 def onUninstall():
     log.info("Hear2Read Indic uninstalling...")

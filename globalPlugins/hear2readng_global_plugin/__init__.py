@@ -38,6 +38,7 @@ from utils.security import objectBelowLockScreenAndWindowsIsLocked
 from globalPlugins.hear2readng_global_plugin.english_settings import (
     EnglishSpeechSettingsDialog,
 )
+from globalPlugins.hear2readng_global_plugin.file_utils import ADDON_NAME
 from globalPlugins.hear2readng_global_plugin.h2rutils import (
     H2RNG_VOICE_LIST_URL,
     ID_ShowStartupPopup,
@@ -86,7 +87,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                                                     self._startup)
         core.postNvdaStartup.register(self._voice_checker)
 
-        # if "Hear2Read NG" not in curr_synth_name:
+        # if ADDON_NAME not in curr_synth_name:
         #     self._voice_checker = lambda: wx.CallLater(2000, 
         #                                             self._perform_voice_check)
         #     core.postNvdaStartup.register(self._voice_checker)
@@ -105,7 +106,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         self.eng_settings_active = False
         self.eng_settings_id = wx.Window.NewControlId()
 
-        if "Hear2Read NG" in curr_synth_name:
+        if ADDON_NAME in curr_synth_name:
             # self.eng_settings_id = wx.Window.NewControlId()
             self.make_eng_settings_menu()
             self.eng_settings_active = True
@@ -115,7 +116,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     def on_synth_changed(self, synth):
         global curr_synth_name
         curr_synth_name = synth.name
-        if "Hear2Read NG" in curr_synth_name:
+        if ADDON_NAME in curr_synth_name:
             # self.eng_settings_id = wx.Window.NewControlId()
             self.make_eng_settings_menu()
             self.eng_settings_active = True
@@ -153,7 +154,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
     def on_no_voices(self, curr_synth_name):
         
-        if "Hear2Read NG" in curr_synth_name:    
+        if ADDON_NAME in curr_synth_name:    
             msg_res = gui.messageBox(
                 # Translators: message telling the user that no voice is installed
                 _(
@@ -297,7 +298,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     )
     def script_h2r_review_currentCharacter(self, gesture: inputCore.InputGesture):
         
-        if "Hear2Read NG" not in curr_synth_name:
+        if ADDON_NAME not in curr_synth_name:
             globalCommands.commands.script_review_currentCharacter(gesture)
             return
 
@@ -338,7 +339,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     )
     def script_h2r_review_currentWord(self, gesture: inputCore.InputGesture):
 
-        if "Hear2Read NG" not in curr_synth_name:
+        if ADDON_NAME not in curr_synth_name:
             globalCommands.commands.script_review_currentWord(gesture)
             return
         
@@ -378,7 +379,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     )
     def script_h2r_review_currentLine(self, gesture: inputCore.InputGesture):
 
-        if "Hear2Read NG" not in curr_synth_name:
+        if ADDON_NAME not in curr_synth_name:
             globalCommands.commands.script_review_currentLine(gesture)
             return
         
@@ -416,7 +417,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         speakOnDemand=True,
     )
     def script_h2r_reportCurrentLine(self, gesture):
-        if "Hear2Read NG" not in curr_synth_name:
+        if ADDON_NAME not in curr_synth_name:
             globalCommands.commands.script_reportCurrentLine(gesture)
             return
         
@@ -457,7 +458,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         speakOnDemand=True,
     )
     def script_h2r_reportCurrentSelection(self, gesture):
-        if "Hear2Read NG" not in curr_synth_name:
+        if ADDON_NAME not in curr_synth_name:
             globalCommands.commands.script_reportCurrentSelection(gesture)
             return
         

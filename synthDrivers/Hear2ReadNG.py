@@ -1,5 +1,5 @@
 # -*- coding: UTF-8 -*-
-#synthDrivers/Hear2Read NG.py
+#synthDrivers/Hear2ReadNG.py
 # A part of the Hear2Read Indic Voices addon for NVDA
 # Copyright (C) 2013-2024, Hear2Read Project Contributors
 # See the file COPYING for more details.
@@ -34,6 +34,7 @@ from synthDriverHandler import (
     synthIndexReached,
 )
 
+from globalPlugins.hear2readng_global_plugin.file_utils import ADDON_NAME
 from globalPlugins.hear2readng_global_plugin.h2rutils import (
     ID_EnglishSynthPitch,
     ID_EnglishSynthRate,
@@ -80,7 +81,7 @@ unicode_ranges = {
 INDIC_RANGE = (0x0900, 0x0DFF)
 
 class SynthDriver(SynthDriver):
-    name = "Hear2Read NG"
+    name = ADDON_NAME
     description = "Hear2Read Indic Voices"
 
     supportedSettings=(
