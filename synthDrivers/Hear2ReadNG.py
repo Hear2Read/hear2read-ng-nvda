@@ -124,19 +124,19 @@ class SynthDriver(SynthDriver):
         if not self.check():
             return
         log.info("H2R NG: init started")
-        confspec = {
-            "engSynth": "string(default='oneCore')",
-            "engVoice": "string(default='')",
-            "engVariant": "string(default='')",
-            "engRate": "integer(default=50)",
-            "engPitch": "integer(default=50)",
-            "engVolume": "integer(default=100)",
-            "engInflection": "integer(default=80)",
-            "showStartupMsg": "boolean(default=True)"
-        }
+        # confspec = {
+        #     "engSynth": "string(default='oneCore')",
+        #     "engVoice": "string(default='')",
+        #     "engVariant": "string(default='')",
+        #     "engRate": "integer(default=50)",
+        #     "engPitch": "integer(default=50)",
+        #     "engVolume": "integer(default=100)",
+        #     "engInflection": "integer(default=80)",
+        #     "showStartupMsg": "boolean(default=True)"
+        # }
         
-        config.conf.spec["hear2read"] = confspec
-        config.conf.save()
+        # config.conf.spec["hear2read"] = confspec
+        # config.conf.save()
 
         # Have H2R pitch be set to the engsynth value to allow PitchCommand
         # to be used for capitals
@@ -144,7 +144,7 @@ class SynthDriver(SynthDriver):
             config.conf["speech"][self.name]["pitch"] = _h2r_config[SCT_EngSynth][ID_EnglishSynthPitch]
         except KeyError as e:
             if self.name in str(e):
-                log.info("Hear2Read no config found, updating default config")
+                log.warn("Hear2Read no config found, updating default config")
                 confspec_default = {
                     "voice": f"string(default='{_H2R_NG_Speak.en_voice}')",
                     "rate": "integer(default=50)",
@@ -282,6 +282,7 @@ class SynthDriver(SynthDriver):
                 subSequence.append(item)
                 # pass
             elif isinstance(item, PitchCommand):
+                # log.info(f"Hear2Read got PitchCommand: {PitchCommand}")
                 subSequence.append(item)
                 # pass
             elif isinstance(item, VolumeCommand):

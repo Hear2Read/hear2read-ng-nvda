@@ -191,7 +191,7 @@ def onUninstall():
         # subsequently
         log.info("Hear2Read update. Ignoring uninstall tasks")
         try:
-            log.info("Hear2Read update from onUninstall")
+            # log.info("Hear2Read update from onUninstall")
             shutil.move(h2r_dll_update_file, H2RNG_ENGINE_DLL_PATH)
         except Exception as e:
             log.error(f"Unable to install Hear2Read TTS Engine! {e}")

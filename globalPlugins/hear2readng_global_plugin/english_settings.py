@@ -64,10 +64,10 @@ def get_eng_synth_list():
     # hack to get the ceiling of the division
     increment = -(-100 // len(synths))
 
-    log.info(f"got synths: f{synths}")
+    # log.info(f"got synths: f{synths}")
     for synthName, synthDesc in synths:
         # don't check Hear2Read and sapi5 voices
-        log.info(f"checking synth: {synthName}")
+        # log.info(f"checking synth: {synthName}")
         if ("Hear2Read" in synthName or "dual_sapi5" in synthName or 
             "MultiLang" in synthName or get_eng_synth_name() in synthName):
             continue
@@ -86,12 +86,12 @@ def get_eng_synth_list():
             continue
         eng_voices = []
         for voice in voices.values():
-            log.info(f"checking voice: {voice}")
-            log.info(f"checking voice: {voice.language}, {voice.id}")
+            # log.info(f"checking voice: {voice}")
+            # log.info(f"checking voice: {voice.language}, {voice.id}")
             if ((voice.language and voice.language.startswith("en")) 
                 or (not voice.language 
                     and "english" in voice.displayName.lower())):
-                log.info(f"adding voice: {voice.displayName}")
+                # log.info(f"adding voice: {voice.displayName}")
                 eng_voices.append(voice)
                 break
         if eng_voices:
@@ -104,7 +104,7 @@ def get_eng_synth_list():
             continue_update,skip = Progress_Dialog.Update(min(increment, 100))
             increment += increment
         if not continue_update:
-            log.info("not continuing synth update on cancel")
+            # log.info("not continuing synth update on cancel")
             eng_synth_list.append((get_eng_synth_name(), get_eng_synth_desc()))
 
             eng_synth_list.sort(key=lambda s: strxfrm(s[1]))
@@ -112,7 +112,8 @@ def get_eng_synth_list():
                 Progress_Dialog.Destroy()
                 Progress_Dialog = None
             except:
-                log.info("Eng Synth progress dialog not present, skipping")
+                # log.info("Eng Synth progress dialog not present, skipping")
+                pass
             return eng_synth_list
 
     eng_synth_list.append((get_eng_synth_name(), get_eng_synth_desc()))
@@ -188,7 +189,7 @@ class EnglishSpeechSettingsDialog(SettingsDialog):
         settingsSizerHelper.addItem(self.voicePanel)
 
     def _enterTriggersOnChangeSynth(self, evt):
-        log.info("_enterTriggersOnChangeSynth")
+        # log.info("_enterTriggersOnChangeSynth")
         if evt.KeyCode == wx.WXK_RETURN:
             self.onChangeSynth(evt)
         else:
@@ -269,7 +270,7 @@ class SynthesizerSelectionDialog(SettingsDialog):
             pass
     
     def onSynthSelected(self, evt):        
-        log.info(f"setting synth {self.synthList.GetString(self.synthList.GetSelection())}")
+        # log.info(f"setting synth {self.synthList.GetString(self.synthList.GetSelection())}")
         set_eng_synth(self.synthNames[self.synthList.GetSelection()])
 
     def onOk(self, evt):
@@ -322,6 +323,7 @@ class VoiceSettingsPanel(SettingsPanel):
         # showing settings for non-instances. Because of this, we must reacquire a reference
         # to the settings class whenever we wish to use it (via L{getSettings}) in case the instance changes.
         # We also use the weakref to refresh the gui when an instance dies.
+        # log.info("Hear2Read")
         self._currentEngSynthRef = weakref.ref(
             get_eng_synth(),
             lambda ref: wx.CallAfter(self.refreshGui)

@@ -531,11 +531,14 @@ def set_eng_synth(eng_synth):
     
     try:
         if EngSynth:
+            # TODO: don't change if same synth
+            # if EngSynth.name == eng_synth:
+            #     log.info("")
             EngSynth.cancel()
             EngSynth.terminate()
             del EngSynth
     except NameError as e:
-        log.info("EngSynth not defined. Ignoring")
+        # log.info("EngSynth not defined. Ignoring")
         pass
 
     # eng_synth = config.conf.get("hear2read", {}).get("engSynth", eng_synth)
@@ -597,9 +600,11 @@ def set_eng_synth_rate(rate):
     EngSynth._set_rate(rate)
 
 def get_eng_synth_pitch():
+    # log.info(f"Got english synth pitch: {EngSynth._get_pitch()}")
     return EngSynth._get_pitch()
 
 def set_eng_synth_pitch(pitch):
+    # log.info(f"Setting english synth pitch to: {pitch}")
     EngSynth._set_pitch(pitch)
 
 def get_eng_synth_volume():
@@ -627,6 +632,7 @@ def get_eng_synth_desc():
         return ""
     
 def get_eng_synth():
+    # log.info("Hear2Read")
     try:
         return EngSynth if EngSynth else None
     except NameError as e:

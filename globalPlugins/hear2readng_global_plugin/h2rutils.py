@@ -111,6 +111,11 @@ OLD_H2RNG_DATA_DIR = os.path.join(os.environ['ALLUSERSPROFILE'],
 #     _h2r_config = config.conf["hear2read"]
 
 class H2RConfigManager():
+    """Class to save Hear2Read addon related config parameters. Used as a
+    singleton.
+
+    The code has been adapted from the code in the wordAccessEnhancement addon 
+    """
     _GeneralConfSpec = """[{section}]
     {showStartupPopup} = boolean(default=True)
     """.format(
@@ -298,10 +303,11 @@ def postUpdateCheck():
     except:
         pass
     try:
-        log.info("Hear2Read update from postUpdateCheck")
+        # log.info("Hear2Read update from postUpdateCheck")
         shutil.move(h2r_dll_update_file, H2RNG_ENGINE_DLL_PATH)
     except FileNotFoundError:
-        log.info("Not post update, doing nothing")
+        # log.info("Not post update, doing nothing")
+        pass
 
 def check_files():
     """
