@@ -117,8 +117,8 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
             version  = "1.7.3"
 
         version_split = version.split(".")
-        self.major_version = version_split[0]
-        self.minor_version = version_split[1]
+        self.major_version = int(version_split[0])
+        self.minor_version = int(version_split[1])
 
         self.get_display_voices()
 
