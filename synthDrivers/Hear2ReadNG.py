@@ -30,6 +30,7 @@ from speech.types import SpeechSequence
 from synthDriverHandler import (
     SynthDriver,
     VoiceInfo,
+    getSynth,
     synthDoneSpeaking,
     synthIndexReached,
 )
@@ -89,7 +90,7 @@ class SynthDriver(SynthDriver):
 #        SynthDriver.VariantSetting(),
         SynthDriver.RateSetting(),
 #        SynthDriver.RateBoostSetting(),
-#        SynthDriver.PitchSetting(),
+        # SynthDriver.PitchSetting(),
 #        SynthDriver.InflectionSetting(),
         SynthDriver.VolumeSetting(),
     )
@@ -124,27 +125,26 @@ class SynthDriver(SynthDriver):
         if not self.check():
             return
         log.info("H2R NG: init started")
-        # confspec = {
-        #     "engSynth": "string(default='oneCore')",
-        #     "engVoice": "string(default='')",
-        #     "engVariant": "string(default='')",
-        #     "engRate": "integer(default=50)",
-        #     "engPitch": "integer(default=50)",
-        #     "engVolume": "integer(default=100)",
-        #     "engInflection": "integer(default=80)",
-        #     "showStartupMsg": "boolean(default=True)"
-        # }
-        
-        # config.conf.spec["hear2read"] = confspec
-        # config.conf.save()
 
         # Have H2R pitch be set to the engsynth value to allow PitchCommand
         # to be used for capitals
+        confspec_default = {
+            "voice": f"string(default='{_H2R_NG_Speak.en_voice}')",
+            "rate": "integer(default=50)",
+            "pitch": "integer(default=50)",
+            "volume": "integer(default=100)",
+            "capPitchChange": "integer(default=30)",
+        }
+        config.conf.spec["speech"][self.name] = confspec_default
+        config.conf.save()
+
         try:
-            config.conf["speech"][self.name]["pitch"] = _h2r_config[SCT_EngSynth][ID_EnglishSynthPitch]
+            tempPitch = _h2r_config[SCT_EngSynth][ID_EnglishSynthPitch]
+            # log.info(f"H2R NG got eng pitch: {tempPitch}, {type(tempPitch)}")
+            config.conf["speech"][self.name]["pitch"] = int(tempPitch)#_h2r_config[SCT_EngSynth][ID_EnglishSynthPitch]
         except KeyError as e:
             if self.name in str(e):
-                log.warn("Hear2Read no config found, updating default config")
+                log.warn("Hear2Read no config found, retrying default config")
                 confspec_default = {
                     "voice": f"string(default='{_H2R_NG_Speak.en_voice}')",
                     "rate": "integer(default=50)",
@@ -154,6 +154,12 @@ class SynthDriver(SynthDriver):
                 }
                 config.conf.spec["speech"][self.name] = confspec_default
                 config.conf.save()
+
+        h2rpitch = config.conf["speech"][self.name]["pitch"]
+        
+        # log.info(f"Hear2ReadNG: set pitch to: {h2rpitch}, {type(h2rpitch)}")
+
+        config.conf.save()
                 
         _H2R_NG_Speak.initialize(self._onIndexReached)
 
@@ -206,6 +212,7 @@ class SynthDriver(SynthDriver):
         # log.info("H2R speak")
         # log.info(f"speech sequence: {speechSequence}")
         self.subsequences = []
+        self.first_subseq = True
         if self.is_curr_voice_eng() or not self._get_voice():
             # self.subsequences.append(speechSequence)
             _H2R_NG_Speak.speak_eng(speech_sequence=speechSequence)
@@ -282,8 +289,12 @@ class SynthDriver(SynthDriver):
                 subSequence.append(item)
                 # pass
             elif isinstance(item, PitchCommand):
-                # log.info(f"Hear2Read got PitchCommand: {PitchCommand}")
+                # log.info(f"Hear2Read got PitchCommand: {item}")
                 subSequence.append(item)
+                # synth = getSynth()
+                # synthConf = config.conf["speech"][synth.name]
+                # h2rpitch = synthConf["pitch"]
+                # log.info(f"Hear2ReadNG: current pitch at: {h2rpitch}, {type(h2rpitch)}")
                 # pass
             elif isinstance(item, VolumeCommand):
                 subSequence.append(item)
@@ -389,6 +400,12 @@ class SynthDriver(SynthDriver):
         # log.info(f"_processSubSequences: isASCII: {isASCII}")
         # log.info(f"_processSubsequence: subsequence {subSequence}")
 
+        # Play a short silence while switching from Indian language to English
+        if not self.first_subseq and isASCII:
+            _H2R_NG_Speak.speak_silence(500)
+
+        self.first_subseq = False
+
         if isinstance(subSequence[-1], IndexCommand):
             self.currIndex = subSequence[-1].index
             # log.info(f"index boundary at: {self.currIndex}")
@@ -403,7 +420,7 @@ class SynthDriver(SynthDriver):
         split_texts = []
         prev_range = ()
         text_bit = ""
-        has_curr_lang = False
+        # has_curr_lang = False
         is_prev_valid_lang = False
 
         # log.info(f"_process_non_native_unicode: {text}")
@@ -413,7 +430,7 @@ class SynthDriver(SynthDriver):
             if self._script_range[0] <= ord(c) <=self._script_range[1] or c in "।॥":
                 # log.info(f"adding: {c}")
                 text_bit += c
-                has_curr_lang = True
+                # has_curr_lang = True
                 is_prev_valid_lang = True
                 continue
 
@@ -650,7 +667,7 @@ class SynthDriver(SynthDriver):
             self._script_range = unicode_ranges["english"]
             return
 
-        if lang_iso in ["hi", "mr", "ne"]:
+        if lang_iso in ["hi", "mr", "ne", "sa"]:
             self._script_range = unicode_ranges["devanagari"]
         elif lang_iso in ["as", "bn"]:
             self._script_range = unicode_ranges["bengali"]

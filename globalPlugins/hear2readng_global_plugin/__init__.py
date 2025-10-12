@@ -209,7 +209,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     def _startup(self):
 
         if _h2r_config[SCT_General][ID_ShowStartupPopup]:
-            log.info("_start_checks: showNewUserMessage")
+            # log.info("_start_checks: showNewUserMessage")
             startupdialog = _StartupInfoDialog()
             gui.runScriptModalDialog(startupdialog,
                                      callback=self._on_startupinfo_closed)
@@ -220,7 +220,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         self._perform_checks()
 
     def _perform_checks(self):
-        log.info("_perform_checks")
+        # log.info("_perform_checks")
         postUpdateCheck()
         self._perform_voice_check()
         
@@ -312,7 +312,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
         info.expand(textInfos.UNIT_CHARACTER)
         scriptCount = scriptHandler.getLastScriptRepeatCount()
-        log.info(f"script_review_currentCharacter interrupt: {scriptCount}, info: {info.text}")
+        # log.info(f"script_review_currentCharacter interrupt: {scriptCount}, info: {info.text}")
         
         if scriptCount == 1:
             try:

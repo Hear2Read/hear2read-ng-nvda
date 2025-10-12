@@ -16,6 +16,7 @@ import core
 import gui
 import synthDriverHandler
 import wx
+from addonHandler import getCodeAddon
 from logHandler import log
 
 from synthDrivers._H2R_NG_Speak import H2RNG_DATA_DIR, H2RNG_VOICES_DIR
@@ -108,6 +109,16 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         self.download_thread = None
         # progress dialog to show download progress
         self.progress_dialog = None
+
+        try:
+            version = getCodeAddon().manifest.version
+        except:
+            log.warn("Hear2Read NG: Unable to read manifest, assuming default version number")
+            version  = "1.7.3"
+
+        version_split = version.split(".")
+        self.major_version = version_split[0]
+        self.minor_version = version_split[1]
 
         self.get_display_voices()
 
@@ -621,6 +632,13 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         
         for key in set(self.installed_voices.keys()).union(
                                                     self.server_voices.keys()):
+            
+            # TODO: this is redundant now as it will be updated post fact. will
+            # need a file on the server informing this. Maybe move voices to a
+            # new location to prevent access by old versions?
+            if key == "sa" and self.major_version > 0 and self.minor_version > 7:
+                continue
+
             local_voice = self.installed_voices.get(key)
             server_voice = self.server_voices.get(key)
 

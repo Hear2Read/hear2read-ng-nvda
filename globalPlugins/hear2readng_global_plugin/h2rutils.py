@@ -7,6 +7,7 @@ import shutil
 import sys
 import urllib.request
 from dataclasses import dataclass
+from glob import glob
 from io import StringIO
 from threading import Thread
 
@@ -53,6 +54,7 @@ lang_names = {"as":"Assamese",
                 "ne":"Nepali", 
                 "or":"Odia", 
                 "pa":"Punjabi", 
+                "sa":"Sanskrit",
                 "si":"Sinhala",
                 "ta":"Tamil", 
                 "te":"Telugu", 
@@ -376,10 +378,16 @@ def parse_server_voices(resp_str):
 
 
 def populateVoices():
-    pathName = os.path.join(H2RNG_VOICES_DIR)
+    """Checks and populates voice list based on the files present in the voice
+    directory
+
+    @return: Dictionary of voice files keyed by the iso2 code of the language
+    @rtype: dict
+    """
+    remove_duplicate_voices()
     voices = dict()
     #list all files in Language directory
-    file_list = os.listdir(pathName)
+    file_list = os.listdir(H2RNG_VOICES_DIR)
     #FIXME: the english voice is obsolete, maybe remove the voiceid?
     en_voice = EN_VOICE_ALOK
     voices[en_voice] = "English"
@@ -402,6 +410,29 @@ def populateVoices():
                 voices[list[0]] = f"Unknown language ({list[0]})"
 
     return voices
+
+def remove_duplicate_voices():
+    """Ensures only one voice per language is present. Retains only the last
+    voice file when sorted alphabetically
+    """
+    file_list = glob("*.onnx", root_dir=H2RNG_VOICES_DIR)
+    iso2_set = set()
+    for file in file_list:
+        iso2 = file.split("-")[0]
+        iso2_set.add(iso2)
+
+    # log.info(f"Hear2Read NG: got lang list: {iso2_set}")
+
+    for iso2 in iso2_set:
+        lang_voices = sorted(glob(f"{iso2}*.onnx", root_dir=H2RNG_VOICES_DIR))
+        if len(lang_voices) > 1:
+            for f in lang_voices[:-1]:
+                json_file = f + ".json"
+                log.warn(f"Hear2Read NG: Found duplicate voice, deleting: {f}")
+                os.remove(os.path.join(H2RNG_VOICES_DIR, f))
+                if os.path.exists(os.path.join(H2RNG_VOICES_DIR, json_file)):
+                    os.remove(os.path.join(H2RNG_VOICES_DIR, json_file))
+
 
 def move_old_voices():
     """Tries to move voices downloaded in addon version 1.4 and lower to the 

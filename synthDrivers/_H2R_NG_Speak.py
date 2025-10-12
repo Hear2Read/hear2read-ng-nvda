@@ -352,6 +352,16 @@ def speak(text, params):
         _execWhenDone(_speak, text.replace("।", "."), params, mustBeAsync=True)
         return
 
+def speak_silence(time: int):
+    """Speaks silence. Used for break between Indic and English text
+
+    @param time: break time in milliseconds
+    @type time: int
+    """
+    one_sec = qual_to_hz[curr_qual]
+    # log.info(f"H2R playing silence frames: {int(one_sec * time/1000)}")
+    player.feed(bytes(int(one_sec * time/1000)))
+
 def stop():
     global isSpeaking
     # Kill all speech from now.
