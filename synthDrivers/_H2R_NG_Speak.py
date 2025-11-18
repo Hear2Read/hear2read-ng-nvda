@@ -5,7 +5,10 @@
 
 import os
 import queue
+
+# import shutil
 import threading
+from collections import OrderedDict
 from ctypes import (
     CFUNCTYPE,
     POINTER,
@@ -25,21 +28,68 @@ import gui
 import nvwave
 import wx
 from logHandler import log
+from synthDriverHandler import changeVoice, getSynthInstance
+
+from globalPlugins.hear2readng_global_plugin.file_utils import (
+    EN_VOICE_ALOK,
+    H2RNG_DATA_DIR,
+    H2RNG_ENGINE_DLL_PATH,
+    H2RNG_VOICES_DIR,
+)
+from globalPlugins.hear2readng_global_plugin.h2rutils import (
+    ID_EnglishSynthInflection,
+    ID_EnglishSynthName,
+    ID_EnglishSynthPitch,
+    ID_EnglishSynthRate,
+    ID_EnglishSynthVariant,
+    ID_EnglishSynthVoice,
+    ID_EnglishSynthVolume,
+    SCT_EngSynth,
+    _h2r_config,
+)
+
+# from globalPlugins.hear2readng_global_plugin.utils import (
+#     EN_VOICE_ALOK,
+#     H2RNG_DATA_DIR,
+#     H2RNG_ENGINE_DLL_PATH,
+#     H2RNG_PHONEME_DIR,
+#     H2RNG_VOICES_DIR,
+#     H2RNG_WAVS_DIR,
+# )
+
+# H2RNG_DATA_DIR = os.path.join(os.getenv("APPDATA"), "Hear2Read-NG")
+# H2RNG_PHONEME_DIR = os.path.join(H2RNG_DATA_DIR, "espeak-ng-data")
+# H2RNG_ENGINE_DLL_PATH = os.path.join(H2RNG_DATA_DIR, "Hear2ReadNG_addon_engine.dll")
+# H2RNG_VOICES_DIR = os.path.join(H2RNG_DATA_DIR, "Voices")
+# H2RNG_WAVS_DIR = os.path.join(H2RNG_DATA_DIR, "wavs")
+# EN_VOICE_ALOK = "en_US-arctic-medium"
+
+# try:
+#     _h2r_config = config.conf["hear2read"]
+# except KeyError:
+#     confspec = {
+#         "engSynth": "string(default='oneCore')",
+#         "engVoice": "string(default='')",
+#         "engVariant": "string(default='')",
+#         "engRate": "integer(default=50)",
+#         "engPitch": "integer(default=50)",
+#         "engVolume": "integer(default=100)",
+#         "engInflection": "integer(default=80)",
+#         "showStartupMsg": "boolean(default=True)"
+#     }
+    
+#     config.conf.spec["hear2read"] = confspec
+#     config.conf["hear2read"] = {}
+#     # config.conf["hear2read"].validate(config.conf.validator)
+#     _h2r_config = config.conf["hear2read"]
 
 isSpeaking = False
 onIndexReached = None
 bgThread=None
 bgQueue = None
 player = None
-en_player = None
 H2RNG_SpeakDLL=None
 
-
-H2RNG_DATA_DIR = os.path.join(os.getenv("APPDATA"), "Hear2Read-NG")
-H2RNG_VOICES_DIR = os.path.join(H2RNG_DATA_DIR, "Voices")
-H2RNG_PHONEME_DIR = os.path.join(H2RNG_DATA_DIR, "espeak-ng-data")
-H2RNG_WAVS_DIR = os.path.join(H2RNG_DATA_DIR, "wavs")
-H2RNG_ENGINE_DLL_PATH = os.path.join(H2RNG_DATA_DIR, "Hear2ReadNG_addon_engine.dll")
 
 #error codes
 EE_OK=0
@@ -50,32 +100,19 @@ EE_NOT_FOUND=2
 # offset between ascii and devanagari digits in unicode
 DEVANAGARI_DIGIT_OFFSET = 2358
 
-en_voice_amy = "en_US-amy-low"
-EN_VOICE_ALOK = "en_US-arctic-medium"
 en_voice = EN_VOICE_ALOK
-en_qual = "med"
+
+eng_synth = "oneCore"
+EngSynth = None
 
 ALOK_ID = 13
 DIPAL_ID = 2
 AMARPREET_ID = 1
-
-lang_names = {"as":"Assamese", 
-                "bn":"Bengali", 
-                "gu":"Gujarati", 
-                "hi":"Hindi", 
-                "kn":"Kannada", 
-                "ml":"Malayalam", 
-                "mr":"Marathi", 
-                "ne":"Nepali", 
-                "or":"Odia", 
-                "pa":"Punjabi", 
-                "ta":"Tamil", 
-                "te":"Telugu", 
-                "en":"English"}
 qual_to_hz = {"low":16000, "med":22050}
 digit_offsets = {"as": 2486, "ne":2358}
 
 curr_voice = ""
+curr_qual = ""
 
 # constants that can be returned by H2R_Speak_callback
 CALLBACK_CONTINUE_SYNTHESIS=0
@@ -88,7 +125,7 @@ def decodeH2RSpeakString(data):
     return data.decode('utf8')
     
 # callback function decorators
-t_H2RNG_audiocallback=CFUNCTYPE(c_int, POINTER(c_int16), c_int, c_bool)
+t_H2RNG_audiocallback=CFUNCTYPE(c_int, POINTER(c_int16), c_int)
 t_H2RNG_indexcallback=CFUNCTYPE(c_int, c_int)
 
 class Callbacks(Structure):
@@ -106,15 +143,27 @@ def getCurrentVoice():
         return curr_voice
     else:
     # TODO: raise exception?
+        # setCurrentVoice(en_voice)
+        # return en_voice
         return None
         
-def setCurrentVoice(voiceID=en_voice):
+def setCurrentVoice(voiceID):
+    # log.info(f"H2R setCurrentVoice: {voiceID}")
     global curr_voice
     curr_voice = voiceID
 
 @t_H2RNG_audiocallback
-def audiocallback(wav, numsamples, isEng):
+def audiocallback(wav, numsamples): #, isEng):
     global isSpeaking
+
+    # log.info(F"audiocallback: {numsamples}")
+
+    if not player:
+        set_player()
+
+    if not player:
+        log.error("Hear2Read no voice found exiting synthesis")
+        return CALLBACK_ABORT_SYNTHESIS
     
     try:
         if not isSpeaking:
@@ -124,7 +173,6 @@ def audiocallback(wav, numsamples, isEng):
         if not wav:
             isSpeaking = False
             player.idle()
-            en_player.idle()
             onIndexReached(None)
             return CALLBACK_ABORT_SYNTHESIS
         
@@ -137,15 +185,8 @@ def audiocallback(wav, numsamples, isEng):
             # f.setframerate(16000)
             # f.writeframes(wav_str)
         # i=i+1
-
-        if isEng:
-            player.sync()
-            en_player.feed(wav,
-                            size=numsamples * sizeof(c_int16))
-        else:
-            en_player.sync()
-            player.feed(wav,
-                            size=numsamples * sizeof(c_int16))
+            
+        player.feed(wav, size=numsamples * sizeof(c_int16))
 
         return CALLBACK_CONTINUE_SYNTHESIS
         
@@ -156,7 +197,6 @@ def audiocallback(wav, numsamples, isEng):
 def indexcallback(index):
     onIndexReached(index)
     return CALLBACK_CONTINUE_SYNTHESIS
-
 
 class BgThread(threading.Thread):
     def __init__(self):
@@ -301,12 +341,26 @@ def speak(text, params):
     # break text info individual sentences if necessary and send only 1 sentence at a time to DLL
     # end of sentence is period or denda
 #    text=text.encode('utf8',errors='ignore')
+
+    if not player:
+        set_player()
+
     if params.charMode:
         _execWhenDone(_speak, characterMode(text), params, mustBeAsync=True)
         return
     else:
         _execWhenDone(_speak, text.replace("।", "."), params, mustBeAsync=True)
         return
+
+def speak_silence(time: int):
+    """Speaks silence. Used for break between Indic and English text
+
+    @param time: break time in milliseconds
+    @type time: int
+    """
+    one_sec = qual_to_hz[curr_qual]
+    # log.info(f"H2R playing silence frames: {int(one_sec * time/1000)}")
+    player.feed(bytes(int(one_sec * time/1000)))
 
 def stop():
     global isSpeaking
@@ -327,114 +381,94 @@ def stop():
         bgQueue.put(item)
     isSpeaking = False
 #    H2RNG_SpeakDLL.H2R_Speak_stop();
-    player.stop()
-    en_player.stop()
 
-def pause(switch):    
-    player.pause(switch)
-    en_player.pause(switch)
+    if player:
+        player.stop()
 
-def populateVoices():
-    pathName = os.path.join(H2RNG_DATA_DIR, "Voices")
-    voices = dict()
-    #list all files in Language directory
-    file_list = os.listdir(pathName)
-    voices[en_voice] = "English"
-    for file in file_list:
-        list = file.split(".")
-        if list[-1] == "onnx":
-            if f"{file}.json" not in file_list:
-                continue
-            nameList = list[0].split("-")
-            lang = nameList[0].split("_")[0]
-            
-            # Already set the sole English voice
-            if lang == "en":
-                continue
-            
-            language = lang_names.get(lang)
-            if language:
-                voices[list[0]] = language
-            else:
-                voices[list[0]] = f"Unknown language ({list[0]})"
+    if EngSynth:
+        EngSynth.cancel()
 
-    return voices
+def pause(switch):
+    if player:
+        player.pause(switch)
+    if EngSynth:
+        EngSynth.pause(switch)
 
-def _setVoiceByIdentifier(voiceID=None):
-    global player
-    
-    v=getCurrentVoice()
-    
-    voice_attrs = voiceID.split("-")
-    
-    if not voiceID or not v or voice_attrs[0].split("_")[0] == "en":
-        H2RNG_SpeakDLL.H2R_Speak_setEngVoiceMain()
-        setCurrentVoice(en_voice)
-        player.close()
-        player = nvwave.WavePlayer(channels=1, 
-                            samplesPerSec=qual_to_hz[en_qual], 
-                            bitsPerSample=16, 
-                            outputDevice=config.conf["speech"]["outputDevice"], 
-                            buffered=True)
-        return EE_NOT_FOUND
-      
-    curr_attrs = v.split("-")
-    qual = voice_attrs[-1][:3]
-    curr_qual = curr_attrs[-1][:3]
+def set_player():
+    global player, curr_qual
+    if not getCurrentVoice():
+        return
+    curr_attrs = getCurrentVoice().split("-")
+    qual = curr_attrs[-1][:3]
+
+    if curr_qual != qual or not player:
+        if player:
+            player.close()
+        curr_qual = qual
         
-    if voiceID == v:
+        # Compatibility for NVDA version < 2025.1
+        try:
+            audioDevice = config.conf["audio"]["outputDevice"]
+        except:
+            audioDevice = config.conf["speech"]["outputDevice"]
+
+        player = nvwave.WavePlayer(channels=1,
+                            samplesPerSec=qual_to_hz[qual],
+                            bitsPerSample=16,
+                            outputDevice=audioDevice)#,
+                            # buffered=True) deprecated, removed 2025.1
+
+
+def _setVoiceByIdentifier(voiceID):    
+    if voiceID:
+        voice_attrs = voiceID.split("-")
+    else:
+        return EE_NOT_FOUND
+        
+    if voiceID == getCurrentVoice():
         return EE_OK
      
-    # workaround to set dipal's voice as default for guj, if the json doesn't contain the correct ID
-    if voice_attrs[0] == "gu" and voice_attrs[1] == "h2r" and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0:
-        if curr_qual != qual:
-            if player:
-                player.close()
-            player = nvwave.WavePlayer(channels=1, samplesPerSec=qual_to_hz[qual], bitsPerSample=16, outputDevice=config.conf["speech"]["outputDevice"], buffered=True)
+    # workaround to set dipal's voice as default for guj, if the json doesn't 
+    # contain the correct ID
+    # TODO check this
+    if (voice_attrs[0] == "gu" and voice_attrs[1] == "h2r"
+        and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0):
         setCurrentVoice(voiceID)
-        H2RNG_SpeakDLL.H2R_Speak_SetVoice(c_char_p(encodeH2RSpeakString(voiceID)), c_char_p(encodeH2RSpeakString(H2RNG_DATA_DIR)))
+        H2RNG_SpeakDLL.H2R_Speak_SetVoice(
+            c_char_p(encodeH2RSpeakString(voiceID)),
+            c_char_p(encodeH2RSpeakString(H2RNG_DATA_DIR)))
         return(H2RNG_SpeakDLL.H2R_Speak_SetSpeakerID(DIPAL_ID))
         
     # workaround to set amarpreet's voice as default for pan 
-    if voice_attrs[0] == "pa" and voice_attrs[1] == "tdilh2r" and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0:
-        if curr_qual != qual:
-            if player:
-                player.close()
-            player = nvwave.WavePlayer(channels=1, samplesPerSec=qual_to_hz[qual], bitsPerSample=16, outputDevice=config.conf["speech"]["outputDevice"], buffered=True)
+    if (voice_attrs[0] == "pa" and voice_attrs[1] == "tdilh2r"
+        and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0):
         setCurrentVoice(voiceID)
-        H2RNG_SpeakDLL.H2R_Speak_SetVoice(c_char_p(encodeH2RSpeakString(voiceID)), c_char_p(encodeH2RSpeakString(H2RNG_DATA_DIR)))
+        H2RNG_SpeakDLL.H2R_Speak_SetVoice(
+            c_char_p(encodeH2RSpeakString(voiceID)),
+            c_char_p(encodeH2RSpeakString(H2RNG_DATA_DIR)))
         return(H2RNG_SpeakDLL.H2R_Speak_SetSpeakerID(AMARPREET_ID))
         
-    # if curr_lang == "en" or curr_qual != qual:
-    if curr_qual != qual:
-        player.close()
-        player = nvwave.WavePlayer(channels=1, samplesPerSec=qual_to_hz[qual], bitsPerSample=16, outputDevice=config.conf["speech"]["outputDevice"], buffered=True)
-    
     setCurrentVoice(voiceID)
     #TODO async - handle exceptions differently
-    return(H2RNG_SpeakDLL.H2R_Speak_SetVoice(c_char_p(encodeH2RSpeakString(voiceID)), c_char_p(encodeH2RSpeakString(H2RNG_DATA_DIR))))
+    return(H2RNG_SpeakDLL.H2R_Speak_SetVoice(
+        c_char_p(encodeH2RSpeakString(voiceID)),
+        c_char_p(encodeH2RSpeakString(H2RNG_DATA_DIR))))
     
+# TODO check if non blocking neccessary
+# def setVoiceByIdentifier(voiceID=None):
+#     _execWhenDone(_setVoiceByIdentifier, voiceID=voiceID, mustBeAsync=True)
 
-def setVoiceByIdentifier(voiceID=None):
-    _execWhenDone(_setVoiceByIdentifier, voiceID=voiceID, mustBeAsync=True)
-
-#TODO there is literally no use other than setting to eng
+#TODO default voice
 def setVoiceByLanguage(lang):
-    
-    global curr_voice, player
     
     lang = lang.split("_")[0]
     
     if lang == "en":
-        # log.info("_H2R_NG_Speak_setVoiceByLanguage: english voice not changed: " + en_voice)
-        # H2RNG_SpeakDLL.H2R_Speak_setEngVoiceMain()
-        # setCurrentVoice(en_voice)
-        # player.close()
-        # player = nvwave.WavePlayer(channels=1, samplesPerSec=qual_to_hz[en_qual], bitsPerSample=16, outputDevice=config.conf["speech"]["outputDevice"], buffered=True)
+        setCurrentVoice(en_voice)
         return en_voice
         
     #Get all files in the Voices Directory
-    pathName = os.path.join(H2RNG_DATA_DIR, "Voices")
+    pathName = os.path.join(H2RNG_VOICES_DIR)
     file_list = os.listdir(pathName)
     
     for file_name in file_list:
@@ -443,49 +477,203 @@ def setVoiceByLanguage(lang):
         # Found one of the NVDA Addon onnx voice file
             # log.info("_H2R_NG_Speak setVoiceByLanguage: parts = %s", parts[0])
             file_lang = parts[0].split("-")[0]
-            if file_lang == lang:
+            if file_lang == lang and (f"{file_name}.json") in file_list:
                 # matching language
                 
                 # log.info("_H2R_NG_Speak:setVoiceByLanguage - found %s for lang %s",file_lang, lang)
 
                 hr = _setVoiceByIdentifier(parts[0])
-                curr_voice = parts[0]
-                return curr_voice
+                setCurrentVoice(parts[0])
+                set_player()
+                return getCurrentVoice()
                 
                 # TODO: send error message on fail
 
-    # modifying to default to english
-    # -shyam 231107
-    # log.info("_H2R_NG_Speak setVoiceByLanguage: defaulting to eng")
-    _setVoiceByIdentifier()
+    for file_name in file_list:
+        parts = file_name.split(".")
+        if parts[-1] == "onnx":
+            if (f"{file_name}.json") in file_list:
+                hr = _setVoiceByIdentifier(parts[0])
+                setCurrentVoice(parts[0])
+                set_player()
+                return getCurrentVoice()
     
-    exceptionString = " Voice does not exist  '" + lang + "'";
-    raise Exception(exceptionString)
+    log.warn("Hear2Read no voices found")
     return None
 
-def init_eng_voice():
-    global H2RNG_SpeakDLL, en_player, en_voice, en_qual
-    #Get all files in the Voices Directory
-    file_list = os.listdir(H2RNG_VOICES_DIR)
+    # TODO inform user
+    # exceptionString = "No Voices found  '" + lang + "'"
+    # raise Exception(exceptionString)
+    # return None
 
-    if EN_VOICE_ALOK.lower() + ".onnx" in file_list:
-        H2RNG_SpeakDLL.H2R_Speak_SetVoiceEn(c_char_p(encodeH2RSpeakString(EN_VOICE_ALOK)), c_char_p(encodeH2RSpeakString(H2RNG_DATA_DIR)))
-        H2RNG_SpeakDLL.H2R_Speak_SetSpeakerIDEn(ALOK_ID)
-        en_player = nvwave.WavePlayer(channels=1, samplesPerSec=22050, bitsPerSample=16, outputDevice=config.conf["speech"]["outputDevice"], buffered=True)
-        en_voice = EN_VOICE_ALOK.lower()
-        en_qual = "med"
-    elif EN_VOICE_ALOK + ".onnx" in file_list:
-        H2RNG_SpeakDLL.H2R_Speak_SetVoiceEn(c_char_p(encodeH2RSpeakString(EN_VOICE_ALOK)), c_char_p(encodeH2RSpeakString(H2RNG_DATA_DIR)))
-        H2RNG_SpeakDLL.H2R_Speak_SetSpeakerIDEn(ALOK_ID)
-        en_player = nvwave.WavePlayer(channels=1, samplesPerSec=22050, bitsPerSample=16, outputDevice=config.conf["speech"]["outputDevice"], buffered=True)
-        en_voice = EN_VOICE_ALOK
-        en_qual = "med"
-    else:
-        H2RNG_SpeakDLL.H2R_Speak_SetVoiceEn(c_char_p(encodeH2RSpeakString(en_voice_amy)), c_char_p(encodeH2RSpeakString(H2RNG_DATA_DIR)))
-        en_player = nvwave.WavePlayer(channels=1, samplesPerSec=16000, bitsPerSample=16, outputDevice=config.conf["speech"]["outputDevice"], buffered=True)
-        en_voice = en_voice_amy
-        en_qual = "low"
+
+def init_eng_synth(default_synth="oneCore"):
+
+    eng_synth = _h2r_config.get(SCT_EngSynth, {}).get(ID_EnglishSynthName, default_synth)
+    eng_voice = _h2r_config.get(SCT_EngSynth, {}).get(ID_EnglishSynthVoice, "")
+    eng_variant = _h2r_config.get(SCT_EngSynth, {}).get(ID_EnglishSynthVariant, "")
+
+    # log.info(f"init_eng_synth: got synth and voice from config: {eng_synth}, {eng_voice}")
+
+    set_eng_synth(eng_synth=eng_synth)
+
+    supportedSettings = EngSynth.supportedSettings
+
+    # log.info(f"got supported eng settings: {supportedSettings}")
+
+    if eng_voice and eng_voice in get_eng_synth_voicelist().keys():
+        set_eng_synth_voice(eng_voice)
+    if eng_variant and eng_variant in get_eng_synth_variantlist().keys():
+        set_eng_synth_variant(eng_variant)
+
+    if "pitch" in supportedSettings:
+        set_eng_synth_pitch(_h2r_config[SCT_EngSynth][ID_EnglishSynthPitch])
+    if "rate" in supportedSettings:
+        set_eng_synth_rate(_h2r_config[SCT_EngSynth][ID_EnglishSynthRate])
+    if "volume" in supportedSettings:
+        set_eng_synth_volume(_h2r_config[SCT_EngSynth][ID_EnglishSynthVolume])
+    if "inflection" in supportedSettings:
+        set_eng_synth_inflection(_h2r_config[SCT_EngSynth][ID_EnglishSynthInflection])
+
+
+def set_eng_synth(eng_synth):
+    global EngSynth, EngVoices
     
+    try:
+        if EngSynth:
+            # TODO: don't change if same synth
+            # if EngSynth.name == eng_synth:
+            #     log.info("")
+            EngSynth.cancel()
+            EngSynth.terminate()
+            del EngSynth
+    except NameError as e:
+        # log.info("EngSynth not defined. Ignoring")
+        pass
+
+    # eng_synth = config.conf.get("hear2read", {}).get("engSynth", eng_synth)
+    # eng_voice = config.conf.get("hear2read", {}).get("engVoice", "")
+
+    EngSynth = getSynthInstance(eng_synth)
+    EngVoices = EngSynth._get_availableVoices()
+    
+    # if eng_voice not in EngVoices.keys():
+    for voice in EngVoices.values():
+        # log.info(f"onecore voice: {voice.displayName}, id: {voice.id}")
+        # Hardcoding the voice as well for now
+        if ((voice.language and voice.language.startswith("en")) 
+                or (not voice.language 
+                    and "english" in voice.displayName.lower())):
+            eng_voice = voice.id
+            break
+    
+    EngSynth._set_voice(eng_voice)
+    # _h2r_config[SCT_EngSynth][ID_EnglishSynthName] = EngSynth.name
+    # _h2r_config[SCT_EngSynth][ID_EnglishSynthVoice] = EngSynth.voice
+    return True
+
+def get_eng_synth_voice():
+    return EngSynth.voice
+
+def set_eng_synth_voice(voice_id):
+    if voice_id not in get_eng_synth_voicelist().keys():
+        log.warn(f"English voice {voice_id} not found in synthesizer, skipping")
+        return
+    log.info(f"set_eng_voice: {voice_id}")
+    EngSynth._set_voice(voice_id)
+
+    log.info(f"voice changed to: {get_eng_synth_voice()}")
+    if get_eng_synth_voice() != voice_id:
+        log.info("failed changing the voice. trying change_voice")
+        changeVoice(EngSynth, voice_id)
+        log.info(f"2nd attempt voice changed to: {get_eng_synth_voice()}")
+
+    # _h2r_config[SCT_EngSynth][ID_EnglishSynthVoice] = EngSynth.voice
+
+def get_eng_synth_variant():
+    try:
+        return EngSynth._get_variant()
+    except NotImplementedError as e:
+        return ""
+
+def set_eng_synth_variant(variant):
+    if variant not in get_eng_synth_variantlist():
+        log.warn(f"English variant {variant} not found in synthesizer, skipping")
+        return
+
+    EngSynth._set_variant(variant)
+
+def get_eng_synth_rate():
+    return EngSynth._get_rate()
+
+def set_eng_synth_rate(rate):
+    EngSynth._set_rate(rate)
+
+def get_eng_synth_pitch():
+    # log.info(f"Got english synth pitch: {EngSynth._get_pitch()}")
+    return EngSynth._get_pitch()
+
+def set_eng_synth_pitch(pitch):
+    # log.info(f"Setting english synth pitch to: {pitch}")
+    EngSynth._set_pitch(pitch)
+
+def get_eng_synth_volume():
+    return EngSynth._get_volume()
+
+def set_eng_synth_volume(volume):
+    EngSynth._set_volume(volume)
+
+def get_eng_synth_inflection():
+    return EngSynth._get_inflection()
+
+def set_eng_synth_inflection(inflection):
+    EngSynth._set_inflection(inflection)
+
+def get_eng_synth_name():
+    if EngSynth:
+        return EngSynth.name
+    else:
+        return ""
+
+def get_eng_synth_desc():
+    if EngSynth:
+        return EngSynth.description
+    else:
+        return ""
+    
+def get_eng_synth():
+    # log.info("Hear2Read")
+    try:
+        return EngSynth if EngSynth else None
+    except NameError as e:
+        return None
+    
+def get_eng_synth_voicelist():
+    try:
+       all_voices = EngSynth._get_availableVoices()
+    #    log.info(f"got all voices: {all_voices}")
+    except Exception as e:
+        log.warn(f"get_eng_synth_voicelist: Unable to list voices from \"{EngSynth.name}\"")
+        return OrderedDict()
+    return  OrderedDict(
+            (id, voice_info)
+            for id, voice_info in all_voices.items()
+            if ((voice_info.language and voice_info.language.startswith("en")) 
+                or (not voice_info.language 
+                    and "english" in voice_info.displayName.lower()))
+        )
+
+def get_eng_synth_variantlist():
+    try:
+        return EngSynth._get_availableVariants()
+    except NotImplementedError as e:
+        log.warn(f"get_eng_synth_variantlist: Unable to list variants from \"{EngSynth.name}\"")
+        return {}
+    
+def speak_eng(speech_sequence):
+    # TODO throw exception if not?
+    if EngSynth:
+        EngSynth.speak(speech_sequence)
     
 # TODO remove deprecated?
 def _checkIfUpdates():
@@ -512,13 +700,14 @@ def _checkIfUpdates():
             )
   
 # check if update stamp file has been modified -shyam 
-# TODO deprecated 
+# TODO remove deprecated 
 def checkIfUpdates():
     # log.info("_H2R checkIfUpdates entered")
     # use another thread as _execWhenDone is used for synthesis -shyam
     update_thread = threading.Thread(target=_checkIfUpdates)
+    update_thread.daemon = True
     update_thread.start()
-    
+
 def H2R_Speak_errcheck(res, func, args):
     if res != EE_OK:
         raise RuntimeError("%s: code %d" % (func.__name__, res))
@@ -530,8 +719,8 @@ def initialize(idxCallback=None):
         It is called with one argument:
         the number of the index or C{None} when speech stops.
     """
-    global H2RNG_SpeakDLL, bgThread, bgQueue, player, onIndexReached#, i, libc
-    
+    global H2RNG_SpeakDLL, bgThread, bgQueue, onIndexReached#, i, libc
+
     H2RNG_SpeakDLL = cdll.LoadLibrary(H2RNG_ENGINE_DLL_PATH)
 
     H2RNG_SpeakDLL.H2R_Speak_init.argtypes=[c_char_p,Callbacks]
@@ -540,41 +729,44 @@ def initialize(idxCallback=None):
     H2RNG_SpeakDLL.H2R_Speak_synthesizeText.argtypes=(c_char_p, SpeechParams)
     H2RNG_SpeakDLL.H2R_Speak_SetVoice.argtypes=[c_char_p,c_char_p]
     H2RNG_SpeakDLL.H2R_Speak_SetVoice.errcheck=H2R_Speak_errcheck
-    H2RNG_SpeakDLL.H2R_Speak_SetVoiceEn.argtypes=[c_char_p,c_char_p]
-    H2RNG_SpeakDLL.H2R_Speak_SetVoiceEn.errcheck=H2R_Speak_errcheck
-    H2RNG_SpeakDLL.H2R_Speak_SetSpeakerIDEn.errcheck=H2R_Speak_errcheck
+    # H2RNG_SpeakDLL.H2R_Speak_SetVoiceEn.argtypes=[c_char_p,c_char_p]
+    # H2RNG_SpeakDLL.H2R_Speak_SetVoiceEn.errcheck=H2R_Speak_errcheck
+    # H2RNG_SpeakDLL.H2R_Speak_SetSpeakerIDEn.errcheck=H2R_Speak_errcheck
             
     callbacks = Callbacks(audiocallback, indexcallback)
     
     H2RNG_SpeakDLL.H2R_Speak_init(c_char_p(encodeH2RSpeakString(H2RNG_DATA_DIR)), callbacks)
     
-    init_eng_voice()
-    H2RNG_SpeakDLL.H2R_Speak_setEngVoiceMain()
-    setCurrentVoice(en_voice)
-    
-    player = nvwave.WavePlayer(channels=1, samplesPerSec=qual_to_hz[en_qual], bitsPerSample=16, outputDevice=config.conf["speech"]["outputDevice"], buffered=False)
+    # player = nvwave.WavePlayer(channels=1, samplesPerSec=qual_to_hz[en_qual], bitsPerSample=16, outputDevice=config.conf["speech"]["outputDevice"], buffered=False)
 
     onIndexReached = idxCallback
     bgQueue = queue.Queue()
-    bgThread=BgThread()
+    bgThread = BgThread()
     bgThread.start()
+
+    init_eng_synth()
 
 
 def terminate():
-    global bgThread, bgQueue, player, en_player, H2RNG_SpeakDLL , onIndexReached
+    global bgThread, bgQueue, player, H2RNG_SpeakDLL , onIndexReached, EngSynth
     stop()
-    bgQueue.put((None, None, None))
-    bgThread.join()
-    H2RNG_SpeakDLL.H2R_Speak_Terminate()
+    if bgQueue:
+        bgQueue.put((None, None, None))
+    if bgThread:
+        bgThread.join()
+    if H2RNG_SpeakDLL:
+        H2RNG_SpeakDLL.H2R_Speak_Terminate()
+        del H2RNG_SpeakDLL
     bgThread=None
     bgQueue=None
-    player.close()
+    if player:
+        player.close()
     player=None
-    en_player.close()
-    en_player=None
-    # H2RNG_SpeakDLL=None
-    del H2RNG_SpeakDLL
     onIndexReached = None
+    if EngSynth:
+        EngSynth.cancel()
+        EngSynth.terminate()
+        del EngSynth
 
 def info():
     # Python 3.8: a path string must be specified, a NULL is fine when what we need is version string.
