@@ -169,4 +169,5 @@ cython_debug/
 *.onnx
 *.onnx.json
 *.dll
+*.zip
 res/

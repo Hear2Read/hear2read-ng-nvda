@@ -623,7 +623,7 @@ class DownloadThread(Thread):
                     with open(download[0], 'wb') as out_file:
                         downloaded = 0
                         while not self.cancel_event.is_set():
-                            chunk = response.read(8192)
+                            chunk = response.read(65536)
                             if not chunk:
                                 break
                             
