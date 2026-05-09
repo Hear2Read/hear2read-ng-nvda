@@ -161,7 +161,7 @@ class SynthDriver(SynthDriver):
 
         config.conf.save()
                 
-        _H2R_NG_Speak.initialize(self._onIndexReached)
+        _H2R_NG_Speak.initialize(self._onIndexReached,self._onDone)
 
         #_H2R_NG_Speak.eng_synth = "oneCore"
         # self.eng_synth = getSynthInstance("oneCore")
@@ -544,7 +544,8 @@ class SynthDriver(SynthDriver):
         
         textmarked=u"".join(textSSML)           
         if (textmarked != ""):
-            params = _H2R_NG_Speak.SpeechParams(piperPhoneLen, amplitude, charMode)
+            # params = _H2R_NG_Speak.SpeechParams(piperPhoneLen, amplitude, charMode)
+            params = _H2R_NG_Speak.SpeechParams(piperPhoneLen**-1.0, 1.0, amplitude, charMode) # 2.0
             _H2R_NG_Speak.speak(textmarked, params)
 
     def cancel(self):
@@ -683,8 +684,12 @@ class SynthDriver(SynthDriver):
             synthIndexReached.notify(synth=self, index=index)
         elif self.subsequences:
             self._processSubSequences()
-        else:
-            synthDoneSpeaking.notify(synth=self) 
+        # else:
+        #     synthDoneSpeaking.notify(synth=self) 
+
+    def _onDone(self):
+        # log.info(f"_onDone")
+        synthDoneSpeaking.notify(synth=self) 
 
     def _receiveIndexNotification(self, synth, index):
         # log.info(f"received index reached: {index}, from: {synth.name}")

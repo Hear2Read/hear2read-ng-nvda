@@ -29,6 +29,7 @@ from gui.guiHelper import (
 from logHandler import log
 
 from .file_utils import (
+    ADDON_NAME,
     EN_VOICE_ALOK,
     H2RNG_DATA_DIR,
     H2RNG_ENGINE_DLL_PATH,
@@ -37,12 +38,7 @@ from .file_utils import (
     H2RNG_WAVS_DIR,
 )
 
-# H2RNG_DATA_DIR = os.path.join(os.getenv("APPDATA"), "Hear2Read-NG")
-# H2RNG_PHONEME_DIR = os.path.join(H2RNG_DATA_DIR, "espeak-ng-data")
-# H2RNG_ENGINE_DLL_PATH = os.path.join(H2RNG_DATA_DIR, "Hear2ReadNG_addon_engine.dll")
-# H2RNG_VOICES_DIR = os.path.join(H2RNG_DATA_DIR, "Voices")
-# H2RNG_WAVS_DIR = os.path.join(H2RNG_DATA_DIR, "wavs")
-# EN_VOICE_ALOK = "en_US-arctic-medium"
+LOG_TAG = f"{ADDON_NAME}-{os.path.basename(__file__).removesuffix(".py")}"
 
 lang_names = {"as":"Assamese", 
                 "bn":"Bengali", 
@@ -68,8 +64,8 @@ H2RNG_VOICES_DOWNLOAD_HTTP = "https://hear2read.org/Hear2Read/voices-piper/"
 # voice list URL
 H2RNG_VOICE_LIST_URL = "https://hear2read.org/nvda-addon/getH2RNGVoiceNames.php"
 # H2RNG_VOICE_LIST_URL = "https://hear2read.org/nvda-addon/getH2RNG2VoiceNames.php"
-H2RNG_UPDATE_FLAG = os.path.join(H2RNG_DATA_DIR, "pendingUpdate")
-H2RNG_CONFIG_FILE = os.path.join(H2RNG_DATA_DIR, "h2rng.ini")
+H2RNG_UPDATE_FLAG = H2RNG_DATA_DIR / "pendingUpdate"
+H2RNG_CONFIG_FILE = H2RNG_DATA_DIR / "h2rng.ini"
 # config section
 SCT_General = "General"
 SCT_EngSynth = "English"
@@ -177,7 +173,7 @@ class H2RConfigManager():
     
     def loadSettings(self):
         self.parse_old_config()
-        if os.path.exists(H2RNG_CONFIG_FILE):
+        if H2RNG_CONFIG_FILE.exists():
             # there is allready a config file
             try:
                 h2r_config, errors = self.loadConfig(H2RNG_CONFIG_FILE)
@@ -185,12 +181,12 @@ class H2RConfigManager():
                     e = Exception("Error parsing configuration file:\n%s" % h2r_config.errors)
                     raise e
             except Exception as e:
-                log.warning(e)
+                log.warning(f"{LOG_TAG}: {e}")
                 # error on reading config file, so delete it
                 os.remove(H2RNG_CONFIG_FILE)
-                log.warning(
-                    "Hear2Read Addon configuration file error: configuration reset to factory defaults")
-        if os.path.exists(H2RNG_CONFIG_FILE):
+                log.warning(f"{LOG_TAG}: Hear2Read Addon configuration file error: configuration " 
+                           "reset to factory defaults")
+        if H2RNG_CONFIG_FILE.exists():
             self.addonConfig, errors = self.loadConfig(H2RNG_CONFIG_FILE)
             # if self.addonConfig.errors:
             #     log.warning(self.addonConfig.errors)
@@ -207,7 +203,7 @@ class H2RConfigManager():
             self.addonConfig, errors = self.loadConfig(None)
             self.addonConfig.filename = H2RNG_CONFIG_FILE
         
-        if not os.path.exists(H2RNG_CONFIG_FILE):
+        if not H2RNG_CONFIG_FILE.exists():
             self.saveSettings(True)
 
     def parse_old_config(self):
@@ -228,7 +224,8 @@ class H2RConfigManager():
             # for NVDA version < 2023.2
             writeToDisk = not (globalVars.appArgs.secure or globalVars.appArgs.launcher)
         if not writeToDisk:
-            log.debug("Not writing add-on configuration, either --secure or --launcher args present")
+            log.debug(f"{LOG_TAG}: Not writing add-on configuration, either --secure or --launcher "
+                      "args present")
             return False
         # after an add-on removing, configuration is deleted
             # so  don't save configuration if there is no nvda restart
@@ -250,9 +247,9 @@ class H2RConfigManager():
             val = Validator()
             self.addonConfig.validate(val, copy=True)
             self.addonConfig.write()
-            log.warning("Hear2Read: configuration saved")
+            log.warning(f"{LOG_TAG}: configuration saved")
         except Exception:
-            log.warning("Hear2Read: Could not save configuration - probably read only file system")
+            log.warning(f"{LOG_TAG}:  Could not save configuration - probably read only file system")
 
     def terminate(self):
         self.saveSettings()
@@ -299,16 +296,16 @@ def postUpdateCheck():
     """Check if Hear2Read is being run post addon update, and rename the 
     updated dll file
     """
-    h2r_dll_update_file = H2RNG_ENGINE_DLL_PATH+".update"
+    h2r_dll_update_file = str(H2RNG_ENGINE_DLL_PATH)+".update"
     try:
         os.remove(H2RNG_UPDATE_FLAG)
     except:
         pass
     try:
-        # log.info("Hear2Read update from postUpdateCheck")
+        # log.info(f"{LOG_TAG}: update from postUpdateCheck")
         shutil.move(h2r_dll_update_file, H2RNG_ENGINE_DLL_PATH)
     except FileNotFoundError:
-        # log.info("Not post update, doing nothing")
+        # log.info(f"{LOG_TAG}: Not post update, doing nothing")
         pass
 
 def check_files():
@@ -327,16 +324,18 @@ def check_files():
     postUpdateCheck()
 
     try:
-        if not os.path.isfile(H2RNG_ENGINE_DLL_PATH):
+        if not H2RNG_ENGINE_DLL_PATH.is_file():
+            log.error(f"{LOG_TAG}: check_files failed: dll doesn't exist: {H2RNG_ENGINE_DLL_PATH}")
             return False
             # dll_is_present = True
 
-        if not os.listdir(H2RNG_PHONEME_DIR):
+        if not H2RNG_PHONEME_DIR.is_dir():
+            log.error(f"{LOG_TAG}: check_files failed: phoneme data doesn't exist: {H2RNG_PHONEME_DIR}")
             return False
             # phonedir_is_present = True
 
     except Exception as e:
-        log.warn(f"Hear2Read Indic check failed with exception: {e}")
+        log.warn(f"{LOG_TAG}: check_files failed with exception: {e}")
         return False
             
     return True
@@ -421,17 +420,17 @@ def remove_duplicate_voices():
         iso2 = file.split("-")[0]
         iso2_set.add(iso2)
 
-    # log.info(f"Hear2Read NG: got lang list: {iso2_set}")
+    # log.info(f"{LOG_TAG}: got lang list: {iso2_set}")
 
     for iso2 in iso2_set:
         lang_voices = sorted(glob(f"{iso2}*.onnx", root_dir=H2RNG_VOICES_DIR))
         if len(lang_voices) > 1:
             for f in lang_voices[:-1]:
                 json_file = f + ".json"
-                log.warn(f"Hear2Read NG: Found duplicate voice, deleting: {f}")
-                os.remove(os.path.join(H2RNG_VOICES_DIR, f))
-                if os.path.exists(os.path.join(H2RNG_VOICES_DIR, json_file)):
-                    os.remove(os.path.join(H2RNG_VOICES_DIR, json_file))
+                log.warn(f"{LOG_TAG}: Found duplicate voice, deleting: {f}")
+                os.remove(H2RNG_VOICES_DIR / f)
+                if (H2RNG_VOICES_DIR / json_file).exists():
+                    os.remove(H2RNG_VOICES_DIR / json_file)
 
 
 def move_old_voices():
@@ -452,14 +451,13 @@ def move_old_voices():
         for file in os.listdir(old_voices_dir):
             try:
                 src_path = os.path.join(old_voices_dir, file)
-                dst_path = os.path.join(H2RNG_VOICES_DIR, file)
-                if not file.startswith("en") and not os.path.isfile(dst_path):
+                dst_path = H2RNG_VOICES_DIR / file
+                if not file.startswith("en") and not dst_path.is_file():
                     shutil.copy2(src=src_path, dst=dst_path)
                     voices_moved = True
                 os.remove(src_path)
             except Exception as e:
-                log.warn("Hear2Read Indic unable to remove old voice file: "
-                         f"{file}")
+                log.warn(f"{LOG_TAG}: unable to remove old voice file: {file}")
         
         old_wavs_dir = os.path.join(OLD_H2RNG_DATA_DIR, "wavs")
 
@@ -467,7 +465,7 @@ def move_old_voices():
             try:
                 copytree_overwrite(src=old_wavs_dir, dst=H2RNG_WAVS_DIR)
             except Exception as e:
-                log.warn("Hear2Read Indic unable to copy old wav folders")
+                log.warn(f"{LOG_TAG}: unable to copy old wav folders")
 
         # try deleting old data
         old_dirs = []
@@ -481,12 +479,12 @@ def move_old_voices():
                     shutil.rmtree(dir)
             except Exception as e:
                 dirname = os.path.basename(dir)
-                log.warn(f"Hear2Read Indic unable to remove old folder: {dirname}")
+                log.warn(f"{LOG_TAG}: unable to remove old folder: {dirname}")
 
         try:
             shutil.rmtree(OLD_H2RNG_DATA_DIR)
         except Exception as e:
-            log.warn("Hear2Read Indic unable to remove old Hear2Read data folder")
+            log.warn(f"{LOG_TAG}: unable to remove old Hear2Read data folder")
             
     return voices_moved
 
@@ -504,15 +502,15 @@ def onInstall():
     """
     # log.info("onInstall from manager")
     src_dir = os.path.join(_dir, "res")
-    dll_name = "Hear2ReadNG_addon_engine.dll"
+    dll_name = "h2r-ng.dll"
 
     # First check that the dll file is not in access, i.e., Hear2Read Indic is not
     # the current TTS synth
-    if os.path.isdir(H2RNG_DATA_DIR):
+    if H2RNG_DATA_DIR.is_dir():
         try:
             # trying moving the dll first
             shutil.move(os.path.join(src_dir, dll_name), 
-                        os.path.join(H2RNG_DATA_DIR, dll_name))
+                        H2RNG_DATA_DIR / dll_name)
             
             # if the data dir is already present, need to take further steps:
             # touch a file called update flag. This is to ensure proper update 
@@ -536,6 +534,9 @@ def onInstall():
             else:
                 log.warn("Unable to update Hear2Read properly. Old voices may be deleted")
 
+    if not os.path.isdir(src_dir):
+        return
+
     try:
         copytree_overwrite(src=src_dir, dst=H2RNG_DATA_DIR)
         shutil.rmtree(src_dir)
@@ -557,8 +558,7 @@ def onInstall():
             try:
                 os.remove(os.path.join(src_voice_dir, file))
             except Exception as e:
-                log.warn(f"Hear2Read Indic unable to remove file from addon dir: "
-                         f"{file}, Exception: {e}")
+                log.warn(f"{LOG_TAG}: unable to remove file from addon dir: {file}, {e}")
 
     move_old_voices()
 
@@ -665,17 +665,17 @@ class _StartupInfoDialog(
 
         _infoText = _(
             # Translators: Info that is displayed when Hear2Read is started.
-            "Hear2Read has introduced a major change with this update. English "
-            "will now be spoken using a different synthesizer, with the default"
-            " being OneCore. This can be changed in the Hear2Read English voice"
-            " settings option in the NVDA menu (NVDA+n). \n\n"
-            "Additionally, the English voice settings like speed and volume "
-            "can be changed independently while using Hear2Read TTS by changing"
-            " the voice to English and then changing the rate of speech or the "
-            "volume. \n\n"
-            "This change has been made to improve navigation in Windows by "
-            "using an alternative TTS for English, which has quicker response "
-            "times."
+            "Hear2Read uses Microsoft OneCore as the default English TTS. This helps improve "
+            "navigation since OneCore has a quicker response.\n\n"
+
+            "Users can change the English TTS using the Hear2Read English voice settings option in " 
+            "the NVDA menu (NVDA+n), where they can also modify English voice parameters, like "
+            "volume and rate. These parameters are separate for the English and the Indic "
+            "voices.\n\n"
+
+            "Alternatively, to change the English volume and rate, the user can switch the voice "
+            "to English and make the changes. The English voice will retain these parameters after "
+            "switching the voice back to Indic."
         )
 
         sText = sHelper.addItem(wx.StaticText(self, label=_infoText))

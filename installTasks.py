@@ -5,6 +5,7 @@
 import os
 import shutil
 import sys
+from pathlib import Path
 
 import gui
 import wx
@@ -12,11 +13,14 @@ from logHandler import log
 
 # repeating path variable initializations as importing from modules is not 
 # allowed in installTasks
-H2RNG_DATA_DIR = os.path.join(os.getenv("APPDATA"), "Hear2Read-NG")
-H2RNG_VOICES_DIR = os.path.join(H2RNG_DATA_DIR, "Voices")
-H2RNG_WAVS_DIR = os.path.join(H2RNG_DATA_DIR, "wavs")
-H2RNG_UPDATE_FLAG = os.path.join(H2RNG_DATA_DIR, "pendingUpdate")
-H2RNG_ENGINE_DLL_PATH = os.path.join(H2RNG_DATA_DIR, "Hear2ReadNG_addon_engine.dll")
+APPDATA = Path(os.getenv('APPDATA') or Path.home())
+H2RNG_DATA_DIR = APPDATA / "Hear2Read-NG"
+H2RNG_ENGINE_DLL_PATH = H2RNG_DATA_DIR / "h2r-ng.dll"
+H2RNG_VOICES_DIR = H2RNG_DATA_DIR / "Voices"
+H2RNG_WAVS_DIR = H2RNG_DATA_DIR / "wavs"
+H2RNG_UPDATE_FLAG = H2RNG_DATA_DIR / "pendingUpdate"
+
+LOG_TAG = "Hear2ReadNG-installTasks"
 
 try:
     _dir=os.path.dirname(__file__.decode("mbcs"))
@@ -42,8 +46,7 @@ def move_old_voices():
                     shutil.copy2(src=src_path, dst=dst_path)
                 os.remove(src_path)
             except Exception as e:
-                log.warn(f"Hear2Read Indic unable to remove old voice file: "
-                         f"{file}, Exception: {e}")
+                log.warn(f"{LOG_TAG}: unable to remove old voice file: {file}, {e}")
         
         old_wavs_dir = os.path.join(OLD_H2RNG_DATA_DIR, "wavs")
 
@@ -51,7 +54,7 @@ def move_old_voices():
             try:
                 copytree_overwrite(src=old_wavs_dir, dst=H2RNG_WAVS_DIR)
             except Exception as e:
-                log.warn(f"Hear2Read Indic unable to copy old wav folders: {e}")
+                log.warn(f"{LOG_TAG}: unable to copy old wav folders: {e}")
 
         # try deleting old data
         old_dirs = []
@@ -64,14 +67,12 @@ def move_old_voices():
                 if os.path.isdir(dir):
                     shutil.rmtree(dir)
             except Exception as e:
-                log.warn(f"Hear2Read Indic unable to remove old folder: {dir}, "
-                         f"Exception: {e}")
+                log.warn(f"{LOG_TAG}: unable to remove old folder: {dir}, {e}")
 
         try:
             shutil.rmtree(OLD_H2RNG_DATA_DIR)
         except Exception as e:
-            log.warn("Hear2Read Indic unable to remove old Hear2Read data folder: "
-                     f"{e}")
+            log.warn(f"{LOG_TAG}: unable to remove old Hear2Read data folder: {e}")
 
 def copytree_compat(src, dst):
     """Copytree version with overwrite compatible for Python < 3.8. This is
@@ -113,7 +114,7 @@ def onInstall():
     attempts to move data from older installs to this folder.
     """
     src_dir = os.path.join(_dir, "res")
-    dll_name = "Hear2ReadNG_addon_engine.dll"
+    dll_name = "h2r-ng.dll"
 
     # First check that the dll file is not in access, i.e., Hear2Read Indic is not
     # the current TTS synth
@@ -141,20 +142,21 @@ def onInstall():
                 #     wx.OK | wx.ICON_ERROR)
                 # raise e
             else:
-                log.warn("Unable to update Hear2Read properly. Old voices may be deleted")
+                log.warn(f"{LOG_TAG}: Unable to update Hear2Read properly. Old voices may be "
+                         "deleted")
 
     try:
         copytree_overwrite(src=src_dir, dst=H2RNG_DATA_DIR)
         shutil.rmtree(src_dir)
     except Exception as e:
-        log.warn(f"Error installing Hear2Read Indic data files: {e}")
+        log.warn(f"{LOG_TAG}: Error installing Hear2ReadNG data files: {e}")
         if dll_name in str(e):
             gui.messageBox(
                 # Translators: message telling the user that Hear2Read Indic was not installed correctly
-                _("Unable to update Hear2Read Indic while it is running in NVDA\n"
+                _("Unable to update Hear2ReadNG while it is running in NVDA\n"
                     "Please switch to a different synthesizer, restart NVDA and retry"),
                 # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
-                _("Hear2Read Indic Install Error"),
+                _("Hear2ReadNG Install Error"),
                 wx.OK | wx.ICON_ERROR)
             raise e
 
@@ -164,8 +166,7 @@ def onInstall():
             try:
                 os.remove(os.path.join(src_voice_dir, file))
             except Exception as e:
-                log.warn(f"Hear2Read Indic unable to remove file from addon dir: "
-                         f"{file}, Exception: {e}")
+                log.warn(f"{LOG_TAG}: unable to remove file from addon dir: {file}, {e}")
 
     move_old_voices()
 
@@ -173,30 +174,29 @@ def onInstall():
     # We will try to remove the older addon
     old_addon_dir = os.path.join(os.path.dirname(_dir), "Hear2Read NG")
     if os.path.isdir(old_addon_dir):
-        log.info("Found older version of Hear2ReadNG, removing the addon")
+        log.info(f"{LOG_TAG}: Found older version of Hear2ReadNG, removing the addon")
         try:
             shutil.rmtree(old_addon_dir)
         except:
-            log.warn("Hear2ReadNG was unable to remove the old addon. Please "
-                     "remove manually")
+            log.warn(f"{LOG_TAG}: Unable to remove the old addon. Please remove manually")
 
 def onUninstall():
-    log.info("Hear2Read Indic uninstalling...")
-    h2r_dll_update_file = H2RNG_ENGINE_DLL_PATH+".update"
+    log.info(f"{LOG_TAG}: uninstalling...")
+    h2r_dll_update_file = Path(str(H2RNG_ENGINE_DLL_PATH)+".update")
     if os.path.isfile(H2RNG_UPDATE_FLAG):
             os.remove(H2RNG_UPDATE_FLAG)
 
     if os.path.isfile(h2r_dll_update_file):
         # remove the update flag file so uninstall has the desired effect
         # subsequently
-        log.info("Hear2Read update. Ignoring uninstall tasks")
+        log.info(f"{LOG_TAG}: Addon update. Ignoring uninstall tasks")
         try:
             # log.info("Hear2Read update from onUninstall")
             shutil.move(h2r_dll_update_file, H2RNG_ENGINE_DLL_PATH)
         except Exception as e:
-            log.error(f"Unable to install Hear2Read TTS Engine! {e}")
+            log.error(f"{LOG_TAG}: Unable to install Hear2ReadNG TTS Engine! {e}")
         return
     try:
         shutil.rmtree(H2RNG_DATA_DIR)
     except Exception as e:
-        log.warn(f"Error removing Hear2Read Indic files on uninstall: {e}")
+        log.warn(f"{LOG_TAG}: Error removing Hear2ReadNG files on uninstall: {e}")
