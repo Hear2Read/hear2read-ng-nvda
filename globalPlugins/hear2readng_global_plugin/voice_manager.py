@@ -22,14 +22,11 @@ from logHandler import log
 from synthDrivers._H2R_NG_Speak import H2RNG_DATA_DIR, H2RNG_VOICES_DIR
 
 from .h2rutils import (
-    # H2RNG_DATA_DIR,
     H2RNG_VOICE_LIST_URL,
-    # H2RNG_VOICES_DIR,
     H2RNG_VOICES_DOWNLOAD_HTTP,
     DownloadThread,
     Voice,
     check_files,
-    # lang_names,
     onInstall,
     parse_server_voices,
     populateVoices,
@@ -37,7 +34,7 @@ from .h2rutils import (
 
 # Constants and global variables:
 
-DLL_FILE_NAME_PREFIX = "Hear2ReadNG_addon_engine"
+DLL_FILE_NAME_PREFIX = "h2r-ng"
 DOWNLOAD_SUFFIX = ".download"
 
 
@@ -55,8 +52,9 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
 
         # Check the synth files and try one time install if installTasks failed
         if not check_files():
+            install_success = False
             try:
-                voices_moved = onInstall()
+                onInstall()
                 # recheck after attempting install
                 install_success = check_files()
             except Exception as e:
@@ -75,7 +73,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                 return
             
             # Inform user voices have been transferred and prompt NVDA restart
-            if voices_moved:
+            if install_success:
                 retval = gui.messageBox(
                     # Translators: content of a message box
                     _("Successfully moved voices downloaded in previous"
@@ -246,7 +244,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         @type voice: utils.Voice
         """
         # TODO remove wav files as well
-        voice_files = Path(H2RNG_VOICES_DIR).glob(f"{voice.id}*")
+        voice_files = H2RNG_VOICES_DIR.glob(f"{voice.id}*")
 
         for f in voice_files:
             f.unlink()
@@ -282,23 +280,20 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         file = f"{voice.id}.onnx"
         download_url = f"{H2RNG_VOICES_DOWNLOAD_HTTP}{file}"
         # log.info(f"download_voice on: {voice.id}, URL: {download_url}")
-        download_queue.append((os.path.join(H2RNG_VOICES_DIR,
-                                            f"{file}{DOWNLOAD_SUFFIX}"), 
+        download_queue.append((H2RNG_VOICES_DIR / f"{file}{DOWNLOAD_SUFFIX}", 
                                download_url))
         
         # the model config file
         file_config = f"{file}.json"
         download_url_config = f"{H2RNG_VOICES_DOWNLOAD_HTTP}{file_config}"
-        download_queue.append((os.path.join(H2RNG_VOICES_DIR,
-                                            f"{file_config}{DOWNLOAD_SUFFIX}"),  
+        download_queue.append((H2RNG_VOICES_DIR / f"{file_config}{DOWNLOAD_SUFFIX}",  
                                download_url_config))
         
         # the extras file, if present
         if voice.extra:
             file_extra = f"{file}.zip"
             download_url_extra = f"{H2RNG_VOICES_DOWNLOAD_HTTP}{file_extra}"
-            download_queue.append((os.path.join(H2RNG_VOICES_DIR,
-                                             f"{file_extra}{DOWNLOAD_SUFFIX}"),  
+            download_queue.append((H2RNG_VOICES_DIR / f"{file_extra}{DOWNLOAD_SUFFIX}",  
                                    download_url_extra))
 
         # Show progress dialog
@@ -449,19 +444,18 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
             @param voice: the Voice object of the voice being installed
             @type voice: utils.Voice
             """
-            voice_files = Path(H2RNG_VOICES_DIR).glob(f"{voice.id}*")
+            voice_files = H2RNG_VOICES_DIR.glob(f"{voice.id}*")
             for file in voice_files:
                 if file.is_file():
                     # Check if the filename ends with suffix and remove
                     if file.match(f"*{DOWNLOAD_SUFFIX}"):
                         new_file = file.with_suffix("")
                         os.rename(file, new_file)
-                    
-                    # extract extra files
-                    if new_file.match("*.zip"):
-                        with zipfile.ZipFile(new_file, 'r') as zipf:
-                            zipf.extractall(H2RNG_DATA_DIR)
-                        new_file.unlink()
+                        # extract extra files
+                        if new_file.match("*.zip"):
+                            with zipfile.ZipFile(new_file, 'r') as zipf:
+                                zipf.extractall(H2RNG_DATA_DIR)
+                            new_file.unlink()
 
         def remove_old_voice(old_voice):
             """Removes old voice files and the corresponding entry from the
@@ -470,7 +464,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
             @param old_voice: the Voice object of the voice being removed
             @type old_voice: utils.Voice
             """
-            if Path(H2RNG_VOICES_DIR, f"{old_voice.id}.onnx"):
+            if H2RNG_VOICES_DIR / f"{old_voice.id}.onnx":
                 self.delete_voice_files(old_voice)
             self.update_langs.pop(old_voice.lang_iso)
 
@@ -554,16 +548,15 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         """
         installed_voices = {}
 
-        if not os.path.isdir(H2RNG_VOICES_DIR):
+        if not H2RNG_VOICES_DIR.is_dir():
             return installed_voices
 
         # clear incomplete downloads -shyam
-        for voice_file in glob.glob(os.path.join(H2RNG_VOICES_DIR,
-                                                  f"*.{DOWNLOAD_SUFFIX}")):
+        for voice_file in H2RNG_VOICES_DIR.glob(f"*.{DOWNLOAD_SUFFIX}"):
             os.remove(voice_file)
 
         # remove obsolete English voice
-        for voice_file in glob.glob(os.path.join(H2RNG_VOICES_DIR, "en*")):
+        for voice_file in H2RNG_VOICES_DIR.glob("en*"):
             os.remove(voice_file)
 
         for id, display_name in populateVoices().items():

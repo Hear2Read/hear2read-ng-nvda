@@ -161,7 +161,7 @@ class SynthDriver(SynthDriver):
 
         config.conf.save()
                 
-        _H2R_NG_Speak.initialize(self._onIndexReached)
+        _H2R_NG_Speak.initialize(self._onIndexReached,self._onDone)
 
         #_H2R_NG_Speak.eng_synth = "oneCore"
         # self.eng_synth = getSynthInstance("oneCore")
@@ -210,7 +210,7 @@ class SynthDriver(SynthDriver):
 
     def speak(self, speechSequence: SpeechSequence):
         # log.info("H2R speak")
-        # log.info(f"speech sequence: {speechSequence}")
+        log.info(f"speech sequence: {speechSequence}")
         self.subsequences = []
         self.first_subseq = True
         if self.is_curr_voice_eng() or not self._get_voice():
@@ -231,7 +231,7 @@ class SynthDriver(SynthDriver):
         for item in speechSequence:
             if isinstance(item,str):
                 text = item
-                # log.info(f"speechSequence: {text}")
+                log.info(f"speechSequence: {text}")
                 isCurrASCII = item.isascii()
                 if not isCurrASCII:
                     # quick hack to check if text has ascii and unicode characters
@@ -284,6 +284,7 @@ class SynthDriver(SynthDriver):
                 subSequence.append(item)
                 # pass
             elif isinstance(item, LangChangeCommand):
+                log.info(f"Hear2Read got LangChangeCommand: {item}")
                 pass
             elif isinstance(item, BreakCommand):
                 subSequence.append(item)
@@ -312,7 +313,7 @@ class SynthDriver(SynthDriver):
         # log.info("Joining subsequences: ")
         subsequences_joined = []
         for isEng, subSeq in self.subsequences:
-            # log.info(f"subseq: isEng {isEng}, {subSeq}")
+            log.info(f"subseq: isEng {isEng}, {subSeq}")
             # isASCII = txt.isascii()
             if not subsequences_joined:
                 subsequences_joined.append([isEng, subSeq])
@@ -397,8 +398,7 @@ class SynthDriver(SynthDriver):
             log.warn("Hear2Read: No speech sequences to process!")
             return
         isASCII, subSequence = self.subsequences.pop(0)
-        # log.info(f"_processSubSequences: isASCII: {isASCII}")
-        # log.info(f"_processSubsequence: subsequence {subSequence}")
+        log.info(f"_processSubSequences: isASCII: {isASCII}, {subSequence}")
 
         # Play a short silence while switching from Indian language to English
         if not self.first_subseq and isASCII:
@@ -410,7 +410,7 @@ class SynthDriver(SynthDriver):
             self.currIndex = subSequence[-1].index
             # log.info(f"index boundary at: {self.currIndex}")
         if isASCII:
-            # log.info(f"_processSubSequences: sending ASCII: {subSequence}")
+            log.info(f"_processSubSequences: sending ASCII: {subSequence}")
             #TODO make sure this works even if no synth
             _H2R_NG_Speak.speak_eng(subSequence)
         else:
@@ -523,7 +523,7 @@ class SynthDriver(SynthDriver):
         self.sequences = []
         # self.processsed_seqs = 0
         textSSML = []
-        # log.info(f"_speak_h2r: speech sequence: {speechSequence}")
+        log.info(f"_speak_h2r: speech sequence: {speechSequence}")
         for item in speechSequence:
             if isinstance(item,str):
                 textSSML.append(self._processText(item))
@@ -544,7 +544,8 @@ class SynthDriver(SynthDriver):
         
         textmarked=u"".join(textSSML)           
         if (textmarked != ""):
-            params = _H2R_NG_Speak.SpeechParams(piperPhoneLen, amplitude, charMode)
+            # params = _H2R_NG_Speak.SpeechParams(piperPhoneLen, amplitude, charMode)
+            params = _H2R_NG_Speak.SpeechParams(piperPhoneLen**-1.0, 1.0, amplitude, charMode) # 2.0
             _H2R_NG_Speak.speak(textmarked, params)
 
     def cancel(self):
@@ -595,6 +596,8 @@ class SynthDriver(SynthDriver):
     def _getAvailableVoices(self):
         if not self.__voices:
             self.__voices = populateVoices()
+        
+        log.info(f"Populated voices: {[{voiceID, voiceName} for voiceID, voiceName in self.__voices.items()]}")
 
         # return OrderedDict((voiceID,VoiceInfo(voiceID,voiceName,"en"))
         #         for voiceID, voiceName in self.__voices.items())
@@ -607,7 +610,7 @@ class SynthDriver(SynthDriver):
         return curr_voice if curr_voice else _H2R_NG_Speak.EN_VOICE_ALOK
 
     def _set_voice(self, identifier):
-        # log.info(f"H2R _set_voice: {identifier}")
+        log.info(f"H2R _set_voice: {identifier}")
 
         if len(self.__voices) < 2:
             _H2R_NG_Speak.setVoiceByLanguage("en")
@@ -673,6 +676,8 @@ class SynthDriver(SynthDriver):
             self._script_range = unicode_ranges["bengali"]
         elif lang_iso == "or":
             self._script_range = unicode_ranges["oriya"]
+        elif lang_iso == "pa":
+            self._script_range = unicode_ranges["gurmukhi"]
         else:
             lang_name = lang_names[lang_iso].lower()
             self._script_range = unicode_ranges[lang_name]
@@ -683,8 +688,12 @@ class SynthDriver(SynthDriver):
             synthIndexReached.notify(synth=self, index=index)
         elif self.subsequences:
             self._processSubSequences()
-        else:
-            synthDoneSpeaking.notify(synth=self) 
+        # else:
+        #     synthDoneSpeaking.notify(synth=self) 
+
+    def _onDone(self):
+        # log.info(f"_onDone")
+        synthDoneSpeaking.notify(synth=self) 
 
     def _receiveIndexNotification(self, synth, index):
         # log.info(f"received index reached: {index}, from: {synth.name}")
