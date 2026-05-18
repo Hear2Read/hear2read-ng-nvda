@@ -52,8 +52,9 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
 
         # Check the synth files and try one time install if installTasks failed
         if not check_files():
+            install_success = False
             try:
-                voices_moved = onInstall()
+                onInstall()
                 # recheck after attempting install
                 install_success = check_files()
             except Exception as e:
@@ -72,7 +73,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                 return
             
             # Inform user voices have been transferred and prompt NVDA restart
-            if voices_moved:
+            if install_success:
                 retval = gui.messageBox(
                     # Translators: content of a message box
                     _("Successfully moved voices downloaded in previous"

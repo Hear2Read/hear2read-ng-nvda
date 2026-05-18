@@ -126,7 +126,7 @@ def getCurrentVoice() -> str | None:
         return None
         
 def setCurrentVoice(voiceID: str):
-    # log.info(f"H2R setCurrentVoice: {voiceID}")
+    log.info(f"H2R setCurrentVoice: {voiceID}")
     global curr_voice
     curr_voice = voiceID
 
@@ -406,7 +406,8 @@ def set_player():
                             # buffered=True) deprecated, removed 2025.1
 
 
-def _setVoiceByIdentifier(voiceID):    
+def _setVoiceByIdentifier(voiceID):  
+    log.info(f"_setVoiceByIdentifier: {voiceID}")  
     if voiceID:
         voice_attrs = voiceID.split("-")
     else:
@@ -450,6 +451,7 @@ def _setVoiceByIdentifier(voiceID):
 
 #TODO default voice
 def setVoiceByLanguage(lang):
+    log.info(f"_H2R_NG_Speak:setVoiceByLanguage: {lang}")
     
     lang = lang.split("_")[0]
     
@@ -682,6 +684,7 @@ def get_eng_synth_variantlist():
 def speak_eng(speech_sequence):
     # TODO throw exception if not?
     if EngSynth:
+        log.info(f"Speaking English: {speech_sequence}")
         EngSynth.speak(speech_sequence)
     
 # TODO remove deprecated?

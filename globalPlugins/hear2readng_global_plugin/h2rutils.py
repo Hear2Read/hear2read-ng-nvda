@@ -9,6 +9,7 @@ import urllib.request
 from dataclasses import dataclass
 from glob import glob
 from io import StringIO
+from pathlib import Path
 from threading import Thread
 
 import addonHandler
@@ -32,7 +33,9 @@ from .file_utils import (
     ADDON_NAME,
     EN_VOICE_ALOK,
     H2RNG_DATA_DIR,
+    H2RNG_DLL_NAME,
     H2RNG_ENGINE_DLL_PATH,
+    H2RNG_ENGINE_UPDATE_PATH,
     H2RNG_PHONEME_DIR,
     H2RNG_VOICES_DIR,
     H2RNG_WAVS_DIR,
@@ -81,12 +84,14 @@ ID_EnglishSynthPitch = "EnglishSynthPitch"
 ID_EnglishSynthInflection = "EnglishSynthInflection"
 
 try:
-    _dir=os.path.dirname(__file__.decode("mbcs"))
+    _diros=os.path.dirname(__file__.decode("mbcs"))
 except AttributeError:
-    _dir=os.path.dirname(__file__)
+    _diros=os.path.dirname(__file__)
 
-_dir = os.path.abspath(os.path.join(_dir, os.pardir, os.pardir))
+_dir = Path(_diros)
+_dir = _dir.parent.parent
     
+#TODO: obsolete remove
 OLD_H2RNG_DATA_DIR = os.path.join(os.environ['ALLUSERSPROFILE'], 
                                   "Hear2Read-ng")
 
@@ -317,9 +322,6 @@ def check_files():
     and at least one voice are present
     @rtype: bool
     """
-    # dll_is_present = False
-    # phonedir_is_present = False
-    # voice_is_present = False
 
     postUpdateCheck()
 
@@ -327,19 +329,16 @@ def check_files():
         if not H2RNG_ENGINE_DLL_PATH.is_file():
             log.error(f"{LOG_TAG}: check_files failed: dll doesn't exist: {H2RNG_ENGINE_DLL_PATH}")
             return False
-            # dll_is_present = True
 
         if not H2RNG_PHONEME_DIR.is_dir():
             log.error(f"{LOG_TAG}: check_files failed: phoneme data doesn't exist: {H2RNG_PHONEME_DIR}")
             return False
-            # phonedir_is_present = True
 
     except Exception as e:
         log.warn(f"{LOG_TAG}: check_files failed with exception: {e}")
         return False
             
     return True
-    # return dll_is_present and phonedir_is_present and voice_is_present
 
 
 def parse_server_voices(resp_str):
@@ -493,7 +492,7 @@ def move_old_voices():
 def onInstall():
     """A fallback that tries moving the required data files in case it wasn't
     done by installTasks.py It is duplicated as importing is not available with
-    installTasks.py
+    installTasks.py. TODO: do a temporary import instead of duplicating
 
     @raises e: raises any exceptions that can occur while transferring the data
     @return: returns True if any voices from an older version (<v1.5) have been
@@ -501,66 +500,78 @@ def onInstall():
     @rtype: bool
     """
     # log.info("onInstall from manager")
-    src_dir = os.path.join(_dir, "res")
-    dll_name = "h2r-ng.dll"
 
-    # First check that the dll file is not in access, i.e., Hear2Read Indic is not
-    # the current TTS synth
-    if H2RNG_DATA_DIR.is_dir():
-        try:
-            # trying moving the dll first
-            shutil.move(os.path.join(src_dir, dll_name), 
-                        H2RNG_DATA_DIR / dll_name)
-            
-            # if the data dir is already present, need to take further steps:
-            # touch a file called update flag. This is to ensure proper update 
-            # behaviour in NVDA - NVDA runs onUninstall when updating, deleting
-            # old voices
-            os.remove(H2RNG_UPDATE_FLAG)
-        except Exception as e:
-            if dll_name in str(e):
-                shutil.move(os.path.join(src_dir, dll_name), 
-                        os.path.join(H2RNG_DATA_DIR, dll_name+".update"))
-                with open(H2RNG_UPDATE_FLAG, 'a'):
-                    os.utime(H2RNG_UPDATE_FLAG, None)
-                # gui.messageBox(
-                #     # Translators: message telling the user that Hear2Read Indic was not installed correctly
-                #     _("Unable to update Hear2Read Indic while it is running in NVDA\n"
-                #         "Please switch to a different synthesizer, restart NVDA and retry"),
-                #     # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
-                #     _("Hear2Read Indic Install Error"),
-                #     wx.OK | wx.ICON_ERROR)
-                # raise e
-            else:
-                log.warn("Unable to update Hear2Read properly. Old voices may be deleted")
+    # resources folder
+    src_dir = _dir / "res"
+    src_dll = src_dir / H2RNG_DLL_NAME
 
-    if not os.path.isdir(src_dir):
+    # nothing can be done if there is no directory
+    if not src_dir.is_dir():
         return
 
+    # First check if update, i.e., H2RNG_DATA_DIR exists.
+    if H2RNG_DATA_DIR.is_dir():            
+        # if the data dir is already present, need to take further steps:
+        # touch a file called update flag. This is to ensure proper update 
+        # behaviour in NVDA - NVDA runs onUninstall when updating, deleting
+        # old voices
+        with open(H2RNG_UPDATE_FLAG, 'a'):
+            os.utime(H2RNG_UPDATE_FLAG, None)
+        try:
+            # trying moving the dll first
+            # log.info(f"{LOG_TAG}: Trying to move dll: {src_dir / H2RNG_DLL_NAME} -> {H2RNG_DATA_DIR / H2RNG_DLL_NAME}")
+            shutil.move(src_dll, H2RNG_ENGINE_UPDATE_PATH)
+            if src_dll.exists() and H2RNG_ENGINE_UPDATE_PATH.exists():
+                try:
+                    src_dll.unlink()
+                except Exception as e:
+                    log.warn(f"{LOG_TAG}: Unable to delete dll from res, might create issues: {e}")
+        except Exception as e:
+            log.warn(f"{LOG_TAG}: Ran into error moving files onInstall: {e}")
+            if H2RNG_DLL_NAME in str(e) and not H2RNG_ENGINE_UPDATE_PATH.exists():
+                log.error(f"{LOG_TAG}: Unable to install engine. Install will probably fail")
+            else:
+                log.warn(f"{LOG_TAG}: Unable to update Hear2Read properly. Old voices may be "
+                         "deleted")
     try:
         copytree_overwrite(src=src_dir, dst=H2RNG_DATA_DIR)
         shutil.rmtree(src_dir)
     except Exception as e:
         log.warn(f"Error installing Hear2Read Indic data files: {e}")
-        if dll_name in str(e):
-            gui.messageBox(
-                # Translators: message telling the user that Hear2Read Indic was not installed correctly
-                _("Unable to update Hear2Read Indic while it is running in NVDA\n"
-                    "Please switch to a different synthesizer, restart NVDA and retry"),
-                # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
-                _("Hear2Read Indic Install Error"),
-                wx.OK | wx.ICON_ERROR)
-            raise e
+        if H2RNG_DLL_NAME in str(e):
+            # if the dll has been copied successfully, we can ignore this, as we will clean up on
+            # restart
+            if H2RNG_ENGINE_UPDATE_PATH.exists():
+                pass
+            else:
+                gui.messageBox(
+                    # Translators: message telling the user that Hear2Read Indic was not installed correctly
+                    _("Unable to update Hear2ReadNG while it is running in NVDA\n"
+                        "Please switch to a different synthesizer, restart NVDA and retry"),
+                    # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
+                    _("Hear2ReadNG Install Error"),
+                    wx.OK | wx.ICON_ERROR)
+                raise e
 
-    src_voice_dir = os.path.join(src_dir, "Voices")
-    if os.path.isdir(src_voice_dir):
+    src_voice_dir = src_dir / "Voices"
+    if src_voice_dir.is_dir():
         for file in os.listdir(src_voice_dir):
             try:
-                os.remove(os.path.join(src_voice_dir, file))
+                os.remove(src_voice_dir / file)
             except Exception as e:
                 log.warn(f"{LOG_TAG}: unable to remove file from addon dir: {file}, {e}")
 
     move_old_voices()
+
+    # We have renamed the addon to conform with the rule of having no spaces
+    # We will try to remove the older addon
+    old_addon_dir = _dir.parent / "Hear2Read NG"
+    if old_addon_dir.is_dir():
+        log.info(f"{LOG_TAG}: Found older version of Hear2ReadNG, removing the addon")
+        try:
+            shutil.rmtree(old_addon_dir)
+        except:
+            log.warn(f"{LOG_TAG}: Unable to remove the old addon. Please remove manually")
 
 @dataclass
 class Voice:
@@ -666,16 +677,25 @@ class _StartupInfoDialog(
         _infoText = _(
             # Translators: Info that is displayed when Hear2Read is started.
             "Hear2Read uses Microsoft OneCore as the default English TTS. This helps improve "
-            "navigation since OneCore has a quicker response.\n\n"
+            "navigation since OneCore has a quicker response. English volume and rate can be "
+            "changed by switching the voice to English. These parameters are separate for the "
+            "English and the Indic voices. The English voice will retain these parameters after "
+            "switching the voice back to Indic\n\n"
 
-            "Users can change the English TTS using the Hear2Read English voice settings option in " 
-            "the NVDA menu (NVDA+n), where they can also modify English voice parameters, like "
-            "volume and rate. These parameters are separate for the English and the Indic "
-            "voices.\n\n"
+            "Users can change to a different English TTS using the Hear2Read English voice "
+            "settings option in the NVDA menu (NVDA+n), where they can also modify English voice "
+            "parameters, like volume and rate."
+            # "Hear2Read uses Microsoft OneCore as the default English TTS. This helps improve "
+            # "navigation since OneCore has a quicker response.\n\n"
 
-            "Alternatively, to change the English volume and rate, the user can switch the voice "
-            "to English and make the changes. The English voice will retain these parameters after "
-            "switching the voice back to Indic."
+            # "Users can change the English TTS using the Hear2Read English voice settings option in " 
+            # "the NVDA menu (NVDA+n), where they can also modify English voice parameters, like "
+            # "volume and rate. These parameters are separate for the English and the Indic "
+            # "voices.\n\n"
+
+            # "Alternatively, to change the English volume and rate, the user can switch the voice "
+            # "to English and make the changes. The English voice will retain these parameters after "
+            # "switching the voice back to Indic."
         )
 
         sText = sHelper.addItem(wx.StaticText(self, label=_infoText))
