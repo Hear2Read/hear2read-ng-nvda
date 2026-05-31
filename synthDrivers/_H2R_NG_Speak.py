@@ -31,6 +31,7 @@ from logHandler import log
 from synthDriverHandler import changeVoice, getSynthInstance
 
 from globalPlugins.hear2readng_global_plugin.file_utils import (
+    ADDON_NAME,
     EN_VOICE_ALOK,
     H2RNG_DATA_DIR,
     H2RNG_ENGINE_DLL_PATH,
@@ -47,6 +48,8 @@ from globalPlugins.hear2readng_global_plugin.h2rutils import (
     SCT_EngSynth,
     _h2r_config,
 )
+
+LOG_TAG = f"{ADDON_NAME}-{os.path.basename(__file__).removesuffix(".py")}"
 
 isSpeaking = False
 def defaultIndexCallback(idx: int | None):
@@ -178,7 +181,7 @@ def indexcallback(index):
 
 @t_H2RNG_donecallback
 def donecallback():
-    # print(f"{LOG_TAG}: donecallback: Entered")
+    print(f"{LOG_TAG}: donecallback: Entered")
     onDone()
     return CALLBACK_CONTINUE_SYNTHESIS
 
@@ -311,7 +314,7 @@ def mar_replacement_rules(text):
 
 
 def speak(text: str, params: SpeechParams):
-    log.info(f"_H2R_NG_Speak speak() text = {text}, params: {params.speed}, {params.pitch}, {params.volume}, {params.charMode}")
+    # log.info(f"_H2R_NG_Speak speak() text = {text}, params: {params.speed}, {params.pitch}, {params.volume}, {params.charMode}")
     # convert ascii digits to devanagari
     
     # if not text.isascii():
@@ -684,7 +687,7 @@ def get_eng_synth_variantlist():
 def speak_eng(speech_sequence):
     # TODO throw exception if not?
     if EngSynth:
-        log.info(f"Speaking English: {speech_sequence}")
+        # log.info(f"Speaking English: {speech_sequence}")
         EngSynth.speak(speech_sequence)
     
 # TODO remove deprecated?
