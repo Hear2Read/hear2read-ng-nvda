@@ -425,22 +425,22 @@ def _setVoiceByIdentifier(voiceID):
     # workaround to set dipal's voice as default for guj, if the json doesn't 
     # contain the correct ID
     # TODO check this
-    if (voice_attrs[0] == "gu" and voice_attrs[1] == "h2r"
-        and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0):
-        setCurrentVoice(voiceID)
-        H2RNG_SpeakDLL.H2R_Speak_SetVoice(
-            c_char_p(encodeH2RSpeakString(voiceID)),
-            c_char_p(encodeH2RSpeakString(str(H2RNG_VOICES_DIR))))
-        return(H2RNG_SpeakDLL.H2R_Speak_SetSpeakerID(DIPAL_ID))
+    # if (voice_attrs[0] == "gu" and voice_attrs[1] == "h2r"
+    #     and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0):
+    #     setCurrentVoice(voiceID)
+    #     H2RNG_SpeakDLL.H2R_Speak_SetVoice(
+    #         c_char_p(encodeH2RSpeakString(voiceID)),
+    #         c_char_p(encodeH2RSpeakString(str(H2RNG_VOICES_DIR))))
+    #     return(H2RNG_SpeakDLL.H2R_Speak_SetSpeakerID(DIPAL_ID))
         
     # workaround to set amarpreet's voice as default for pan 
-    if (voice_attrs[0] == "pa" and voice_attrs[1] == "tdilh2r"
-        and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0):
-        setCurrentVoice(voiceID)
-        H2RNG_SpeakDLL.H2R_Speak_SetVoice(
-            c_char_p(encodeH2RSpeakString(voiceID)),
-            c_char_p(encodeH2RSpeakString(str(H2RNG_VOICES_DIR))))
-        return(H2RNG_SpeakDLL.H2R_Speak_SetSpeakerID(AMARPREET_ID))
+    # if (voice_attrs[0] == "pa" and voice_attrs[1] == "tdilh2r"
+    #     and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0):
+    #     setCurrentVoice(voiceID)
+    #     H2RNG_SpeakDLL.H2R_Speak_SetVoice(
+    #         c_char_p(encodeH2RSpeakString(voiceID)),
+    #         c_char_p(encodeH2RSpeakString(str(H2RNG_VOICES_DIR))))
+    #     return(H2RNG_SpeakDLL.H2R_Speak_SetSpeakerID(AMARPREET_ID))
         
     setCurrentVoice(voiceID)
     #TODO async - handle exceptions differently
