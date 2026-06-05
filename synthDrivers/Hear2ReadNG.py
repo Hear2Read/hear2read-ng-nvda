@@ -210,7 +210,7 @@ class SynthDriver(SynthDriver):
 
     def speak(self, speechSequence: SpeechSequence):
         # log.info("H2R speak")
-        log.info(f"speech sequence: {speechSequence}")
+        # log.info(f"speech sequence: {speechSequence}")
         self.subsequences = []
         self.first_subseq = True
         if self.is_curr_voice_eng() or not self._get_voice():
@@ -219,7 +219,9 @@ class SynthDriver(SynthDriver):
             return
         isPrevASCII = True
         firstText = True
-        self.currIndex = 0
+        # we use a negative index internally to synchronize the English synthesizer. This is used to
+        # to mark any internal boundary between indic and English text. The value decreases to 
+        # larger negative values for subsequent boundaries
         self.negIndex = -2
         subSequence : SpeechSequence = []
         indexCmd = None
@@ -231,7 +233,7 @@ class SynthDriver(SynthDriver):
         for item in speechSequence:
             if isinstance(item,str):
                 text = item
-                log.info(f"speechSequence: {text}")
+                # log.info(f"speechSequence: {text}")
                 isCurrASCII = item.isascii()
                 if not isCurrASCII:
                     # quick hack to check if text has ascii and unicode characters
@@ -284,7 +286,7 @@ class SynthDriver(SynthDriver):
                 subSequence.append(item)
                 # pass
             elif isinstance(item, LangChangeCommand):
-                log.info(f"Hear2Read got LangChangeCommand: {item}")
+                # log.info(f"Hear2Read got LangChangeCommand: {item}")
                 pass
             elif isinstance(item, BreakCommand):
                 subSequence.append(item)
@@ -313,7 +315,7 @@ class SynthDriver(SynthDriver):
         # log.info("Joining subsequences: ")
         subsequences_joined = []
         for isEng, subSeq in self.subsequences:
-            log.info(f"subseq: isEng {isEng}, {subSeq}")
+            # log.info(f"subseq: isEng {isEng}, {subSeq}")
             # isASCII = txt.isascii()
             if not subsequences_joined:
                 subsequences_joined.append([isEng, subSeq])
@@ -398,7 +400,7 @@ class SynthDriver(SynthDriver):
             log.warn("Hear2Read: No speech sequences to process!")
             return
         isASCII, subSequence = self.subsequences.pop(0)
-        log.info(f"_processSubSequences: isASCII: {isASCII}, {subSequence}")
+        # log.info(f"_processSubSequences: isASCII: {isASCII}, {subSequence}")
 
         # Play a short silence while switching from Indian language to English
         if not self.first_subseq and isASCII:
@@ -406,11 +408,8 @@ class SynthDriver(SynthDriver):
 
         self.first_subseq = False
 
-        if isinstance(subSequence[-1], IndexCommand):
-            self.currIndex = subSequence[-1].index
-            # log.info(f"index boundary at: {self.currIndex}")
         if isASCII:
-            log.info(f"_processSubSequences: sending ASCII: {subSequence}")
+            # log.info(f"_processSubSequences: sending ASCII: {subSequence}")
             #TODO make sure this works even if no synth
             _H2R_NG_Speak.speak_eng(subSequence)
         else:
@@ -523,7 +522,7 @@ class SynthDriver(SynthDriver):
         self.sequences = []
         # self.processsed_seqs = 0
         textSSML = []
-        log.info(f"_speak_h2r: speech sequence: {speechSequence}")
+        # log.info(f"_speak_h2r: speech sequence: {speechSequence}")
         for item in speechSequence:
             if isinstance(item,str):
                 textSSML.append(self._processText(item))
@@ -683,28 +682,33 @@ class SynthDriver(SynthDriver):
             self._script_range = unicode_ranges[lang_name]
 
     def _onIndexReached(self, index):
-        # log.info(f"_onIndexReached: {index}")
-        if index != 0:
+        log.info(f"_onIndexReached: {index}")
+        # we use -ve indexes internally to track interleaved native-English text, NVDA shouldn't be
+        # notified of these
+        if index > 0:
             synthIndexReached.notify(synth=self, index=index)
-        elif self.subsequences:
-            self._processSubSequences()
+        # Note: Indexes can appear within a subsequence in continuous reading, and we have a 
+        # reliable done callback, so only process next subsequence on done
+        # if self.subsequences:
+        #     self._processSubSequences()
         # else:
         #     synthDoneSpeaking.notify(synth=self) 
 
     def _onDone(self):
-        # log.info(f"_onDone")
-        synthDoneSpeaking.notify(synth=self) 
+        log.info("_onDone")
+        if not self.subsequences:
+            synthDoneSpeaking.notify(synth=self) 
+        else:
+            self._processSubSequences()
 
     def _receiveIndexNotification(self, synth, index):
-        # log.info(f"received index reached: {index}, from: {synth.name}")
-        if self.name != synth.name:
+        log.info(f"received index reached: {index}, from: {synth.name}")
+        if self.name != synth.name and index > 0:
             synthIndexReached.notify(synth=self, index=index)
             return
-        # if index == self.currIndex and self.subsequences:
-        #     self._processSubSequences()
 
     def _receiveDoneNotification(self, synth):
-        # log.info(f"received synth done: {synth.name}")
+        log.info(f"received synth done: {synth.name}")
         if self.name != synth.name:
             if self.subsequences:
                 self._processSubSequences()

@@ -31,6 +31,7 @@ from logHandler import log
 from synthDriverHandler import changeVoice, getSynthInstance
 
 from globalPlugins.hear2readng_global_plugin.file_utils import (
+    ADDON_NAME,
     EN_VOICE_ALOK,
     H2RNG_DATA_DIR,
     H2RNG_ENGINE_DLL_PATH,
@@ -47,6 +48,8 @@ from globalPlugins.hear2readng_global_plugin.h2rutils import (
     SCT_EngSynth,
     _h2r_config,
 )
+
+LOG_TAG = f"{ADDON_NAME}-{os.path.basename(__file__).removesuffix(".py")}"
 
 isSpeaking = False
 def defaultIndexCallback(idx: int | None):
@@ -178,7 +181,7 @@ def indexcallback(index):
 
 @t_H2RNG_donecallback
 def donecallback():
-    # print(f"{LOG_TAG}: donecallback: Entered")
+    print(f"{LOG_TAG}: donecallback: Entered")
     onDone()
     return CALLBACK_CONTINUE_SYNTHESIS
 
@@ -311,7 +314,7 @@ def mar_replacement_rules(text):
 
 
 def speak(text: str, params: SpeechParams):
-    log.info(f"_H2R_NG_Speak speak() text = {text}, params: {params.speed}, {params.pitch}, {params.volume}, {params.charMode}")
+    # log.info(f"_H2R_NG_Speak speak() text = {text}, params: {params.speed}, {params.pitch}, {params.volume}, {params.charMode}")
     # convert ascii digits to devanagari
     
     # if not text.isascii():
@@ -422,22 +425,22 @@ def _setVoiceByIdentifier(voiceID):
     # workaround to set dipal's voice as default for guj, if the json doesn't 
     # contain the correct ID
     # TODO check this
-    if (voice_attrs[0] == "gu" and voice_attrs[1] == "h2r"
-        and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0):
-        setCurrentVoice(voiceID)
-        H2RNG_SpeakDLL.H2R_Speak_SetVoice(
-            c_char_p(encodeH2RSpeakString(voiceID)),
-            c_char_p(encodeH2RSpeakString(str(H2RNG_VOICES_DIR))))
-        return(H2RNG_SpeakDLL.H2R_Speak_SetSpeakerID(DIPAL_ID))
+    # if (voice_attrs[0] == "gu" and voice_attrs[1] == "h2r"
+    #     and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0):
+    #     setCurrentVoice(voiceID)
+    #     H2RNG_SpeakDLL.H2R_Speak_SetVoice(
+    #         c_char_p(encodeH2RSpeakString(voiceID)),
+    #         c_char_p(encodeH2RSpeakString(str(H2RNG_VOICES_DIR))))
+    #     return(H2RNG_SpeakDLL.H2R_Speak_SetSpeakerID(DIPAL_ID))
         
     # workaround to set amarpreet's voice as default for pan 
-    if (voice_attrs[0] == "pa" and voice_attrs[1] == "tdilh2r"
-        and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0):
-        setCurrentVoice(voiceID)
-        H2RNG_SpeakDLL.H2R_Speak_SetVoice(
-            c_char_p(encodeH2RSpeakString(voiceID)),
-            c_char_p(encodeH2RSpeakString(str(H2RNG_VOICES_DIR))))
-        return(H2RNG_SpeakDLL.H2R_Speak_SetSpeakerID(AMARPREET_ID))
+    # if (voice_attrs[0] == "pa" and voice_attrs[1] == "tdilh2r"
+    #     and H2RNG_SpeakDLL.H2R_Speak_GetSpeakerID() <= 0):
+    #     setCurrentVoice(voiceID)
+    #     H2RNG_SpeakDLL.H2R_Speak_SetVoice(
+    #         c_char_p(encodeH2RSpeakString(voiceID)),
+    #         c_char_p(encodeH2RSpeakString(str(H2RNG_VOICES_DIR))))
+    #     return(H2RNG_SpeakDLL.H2R_Speak_SetSpeakerID(AMARPREET_ID))
         
     setCurrentVoice(voiceID)
     #TODO async - handle exceptions differently
@@ -684,7 +687,7 @@ def get_eng_synth_variantlist():
 def speak_eng(speech_sequence):
     # TODO throw exception if not?
     if EngSynth:
-        log.info(f"Speaking English: {speech_sequence}")
+        # log.info(f"Speaking English: {speech_sequence}")
         EngSynth.speak(speech_sequence)
     
 # TODO remove deprecated?
