@@ -52,74 +52,74 @@ from synthDrivers._H2R_NG_Speak import (
 # TODO? add restart NVDA dialog
 
 Eng_Synth = None
-Progress_Dialog = None
+# Progress_Dialog = None
 
-def get_eng_synth_list():
-    """Generates the list of available synthesizers with English voices
-    """
-    global Progress_Dialog
-    eng_synth_list=[]
+# def get_eng_synth_list():
+#     """Generates the list of available synthesizers with English voices
+#     """
+#     global Progress_Dialog
+#     eng_synth_list=[]
 
-    synths  = getSynthList()
-    # hack to get the ceiling of the division
-    increment = -(-100 // len(synths))
+#     synths  = getSynthList()
+#     # hack to get the ceiling of the division
+#     increment = -(-100 // len(synths))
 
-    # log.info(f"got synths: f{synths}")
-    for synthName, synthDesc in synths:
-        # don't check Hear2Read and sapi5 voices
-        # log.info(f"checking synth: {synthName}")
-        if ("Hear2Read" in synthName or "dual_sapi5" in synthName or 
-            "MultiLang" in synthName or get_eng_synth_name() in synthName):
-            continue
+#     # log.info(f"got synths: f{synths}")
+#     for synthName, synthDesc in synths:
+#         # don't check Hear2Read and sapi5 voices
+#         # log.info(f"checking synth: {synthName}")
+#         if ("Hear2Read" in synthName or "dual_sapi5" in synthName or 
+#             "MultiLang" in synthName or get_eng_synth_name() in synthName):
+#             continue
         
-        try:
-            synth = getSynthInstance(synthName)
-            voices = synth._get_availableVoices()
-        except Exception as e:
-            log.warn(f"Unable to list voices from \"{synthName}\", skipping: {e}")
-            try:
-                synth.cancel()
-                synth.terminate()
-            except:
-                log.warn("Unable to kill synth, skipping")
-                pass
-            continue
-        eng_voices = []
-        for voice in voices.values():
-            # log.info(f"checking voice: {voice}")
-            # log.info(f"checking voice: {voice.language}, {voice.id}")
-            if ((voice.language and voice.language.startswith("en")) 
-                or (not voice.language 
-                    and "english" in voice.displayName.lower())):
-                # log.info(f"adding voice: {voice.displayName}")
-                eng_voices.append(voice)
-                break
-        if eng_voices:
-            eng_synth_list.append((synthName, synthDesc))
-            # eng_voices[synthName] = eng_voices
-        synth.cancel()
-        synth.terminate()
-        if Progress_Dialog:
-            # check increment against 100 as ceiling can exceed 100
-            continue_update,skip = Progress_Dialog.Update(min(increment, 100))
-            increment += increment
-        if not continue_update:
-            # log.info("not continuing synth update on cancel")
-            eng_synth_list.append((get_eng_synth_name(), get_eng_synth_desc()))
+#         try:
+#             synth = getSynthInstance(synthName)
+#             voices = synth._get_availableVoices()
+#         except Exception as e:
+#             log.warn(f"Unable to list voices from \"{synthName}\", skipping: {e}")
+#             try:
+#                 synth.cancel()
+#                 synth.terminate()
+#             except:
+#                 log.warn("Unable to kill synth, skipping")
+#                 pass
+#             continue
+#         eng_voices = []
+#         for voice in voices.values():
+#             # log.info(f"checking voice: {voice}")
+#             # log.info(f"checking voice: {voice.language}, {voice.id}")
+#             if ((voice.language and voice.language.startswith("en")) 
+#                 or (not voice.language 
+#                     and "english" in voice.displayName.lower())):
+#                 # log.info(f"adding voice: {voice.displayName}")
+#                 eng_voices.append(voice)
+#                 break
+#         if eng_voices:
+#             eng_synth_list.append((synthName, synthDesc))
+#             # eng_voices[synthName] = eng_voices
+#         synth.cancel()
+#         synth.terminate()
+#         if Progress_Dialog:
+#             # check increment against 100 as ceiling can exceed 100
+#             continue_update,skip = Progress_Dialog.Update(min(increment, 100))
+#             increment += increment
+#             if not continue_update:
+#                 # log.info("not continuing synth update on cancel")
+#                 eng_synth_list.append((get_eng_synth_name(), get_eng_synth_desc()))
 
-            eng_synth_list.sort(key=lambda s: strxfrm(s[1]))
-            try:
-                Progress_Dialog.Destroy()
-                Progress_Dialog = None
-            except:
-                # log.info("Eng Synth progress dialog not present, skipping")
-                pass
-            return eng_synth_list
+#                 eng_synth_list.sort(key=lambda s: strxfrm(s[1]))
+#                 try:
+#                     Progress_Dialog.Destroy()
+#                     Progress_Dialog = None
+#                 except:
+#                     # log.info("Eng Synth progress dialog not present, skipping")
+#                     pass
+#                 return eng_synth_list
 
-    eng_synth_list.append((get_eng_synth_name(), get_eng_synth_desc()))
-    eng_synth_list.sort(key=lambda s: strxfrm(s[1]))
+#     eng_synth_list.append((get_eng_synth_name(), get_eng_synth_desc()))
+#     eng_synth_list.sort(key=lambda s: strxfrm(s[1]))
 
-    return eng_synth_list
+#     return eng_synth_list
 
 class EnglishSpeechSettingsDialog(SettingsDialog):
     """Setting dialog for English speech settings. This is an adaptation of the 
@@ -251,14 +251,7 @@ class SynthesizerSelectionDialog(SettingsDialog):
         self.synthList.SetFocus()
 
     def updateSynthesizerList(self):
-        global Progress_Dialog
-        # Show progress dialog
-        Progress_Dialog = wx.ProgressDialog("Updating English TTS List",
-                        "Please wait...",
-                        maximum=100, parent=self,
-                        style=wx.PD_CAN_ABORT | wx.PD_AUTO_HIDE)
-        
-        driverList=get_eng_synth_list()
+        driverList=self.get_eng_synths()
         self.synthNames=[x[0] for x in driverList]
         options=[x[1] for x in driverList]
         self.synthList.Clear()
@@ -268,6 +261,82 @@ class SynthesizerSelectionDialog(SettingsDialog):
             self.synthList.SetSelection(index)
         except:
             pass
+
+    def get_eng_synths(self):
+        """Generates the list of available synthesizers with English voices
+        """
+        eng_synth_list=[]
+        gui.mainFrame.prePopup()
+        # Show progress dialog
+        progressDialog = wx.ProgressDialog("Updating English TTS List",
+                        "Please wait...",
+                        maximum=100, parent=self,
+                        style=wx.PD_CAN_ABORT | wx.PD_AUTO_HIDE)
+        progressDialog.Raise()
+
+        synths  = getSynthList()
+        # hack to get the ceiling of the division
+        increment = -(-100 // len(synths))
+
+        # log.info(f"got synths: f{synths}")
+        for synthName, synthDesc in synths:
+            # don't check Hear2Read and sapi5 voices
+            # log.info(f"checking synth: {synthName}")
+            if ("Hear2Read" in synthName or "dual_sapi5" in synthName or 
+                "MultiLang" in synthName or get_eng_synth_name() in synthName):
+                continue
+            
+            try:
+                synth = getSynthInstance(synthName)
+                voices = synth._get_availableVoices()
+            except Exception as e:
+                log.warn(f"Unable to list voices from \"{synthName}\", skipping: {e}")
+                try:
+                    synth.cancel()
+                    synth.terminate()
+                except:
+                    log.warn("Unable to kill synth, skipping")
+                    pass
+                continue
+            eng_voices = []
+            for voice in voices.values():
+                # log.info(f"checking voice: {voice}")
+                # log.info(f"checking voice: {voice.language}, {voice.id}")
+                if ((voice.language and voice.language.startswith("en")) 
+                    or (not voice.language 
+                        and "english" in voice.displayName.lower())):
+                    # log.info(f"adding voice: {voice.displayName}")
+                    eng_voices.append(voice)
+                    break
+            if eng_voices:
+                eng_synth_list.append((synthName, synthDesc))
+                # eng_voices[synthName] = eng_voices
+            synth.cancel()
+            synth.terminate()
+            if progressDialog:
+                # check increment against 100 as ceiling can exceed 100
+                continue_update,skip = progressDialog.Update(min(increment, 100))
+                increment += increment
+                if not continue_update:
+                    # log.info("not continuing synth update on cancel")
+                    eng_synth_list.append((get_eng_synth_name(), get_eng_synth_desc()))
+                    eng_synth_list.sort(key=lambda s: strxfrm(s[1]))
+                    try:
+                        progressDialog.Destroy()
+                        del progressDialog
+                    except:
+                        # log.info("Eng Synth progress dialog not present, skipping")
+                        pass
+                    return eng_synth_list
+
+        eng_synth_list.append((get_eng_synth_name(), get_eng_synth_desc()))
+        eng_synth_list.sort(key=lambda s: strxfrm(s[1]))
+        
+        progressDialog.Destroy()
+        del progressDialog
+        gui.mainFrame.postPopup()
+
+        return eng_synth_list
     
     def onSynthSelected(self, evt):        
         # log.info(f"setting synth {self.synthList.GetString(self.synthList.GetSelection())}")

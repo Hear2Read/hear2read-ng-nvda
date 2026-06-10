@@ -21,7 +21,6 @@ from ctypes import (
     cdll,
     sizeof,
 )
-from urllib.request import urlopen
 
 import config
 import gui
@@ -187,8 +186,10 @@ def donecallback():
 
 class BgThread(threading.Thread):
     def __init__(self):
-        super().__init__(name=f"{self.__class__.__module__}.{self.__class__.__qualname__}")
-        self.setDaemon(True)
+        super().__init__(
+            name=f"{self.__class__.__module__}.{self.__class__.__qualname__}",
+            daemon=True
+            )
 
     def run(self):
         while True:
@@ -689,39 +690,6 @@ def speak_eng(speech_sequence):
     if EngSynth:
         # log.info(f"Speaking English: {speech_sequence}")
         EngSynth.speak(speech_sequence)
-    
-# TODO remove deprecated?
-def _checkIfUpdates():
-    show_update = False
-    stamp_url = 'https://hear2read.org/nvda-addon/getNGUpdateStamp.php'
-    server_stamp = urlopen(stamp_url).read()
-    stamp_file = H2RNG_DATA_DIR / "ng-update"
-    if os.path.isfile(stamp_file):
-        with open(stamp_file, encoding="utf-8") as f:
-            local_stamp = f.read()
-        if int(server_stamp) > int(local_stamp):
-            show_update = True
-            
-    elif server_stamp and (int(server_stamp) > 0):
-        show_update = True
-    
-    if show_update:
-        gui.messageBox(
-                _("Update available for Hear2Read Indic synthesiser\n" +
-                    "Open the Hear2Read Indic Voice Manager app to update"),
-                # Translators: The title of a dialog presented when an error occurs.
-                _("Hear2Read Indic Update!"),
-                wx.OK | wx.ICON_WARNING
-            )
-  
-# check if update stamp file has been modified -shyam 
-# TODO remove deprecated 
-def checkIfUpdates():
-    # log.info("_H2R checkIfUpdates entered")
-    # use another thread as _execWhenDone is used for synthesis -shyam
-    update_thread = threading.Thread(target=_checkIfUpdates)
-    update_thread.daemon = True
-    update_thread.start()
 
 def H2R_Speak_errcheck(res, func, args):
     if res != EE_OK:
