@@ -2,10 +2,14 @@
 # Copyright (C) 2013-2024, Hear2Read Project Contributors
 # See the file COPYING for more details.
 
+import ctypes
 import os
 import shutil
+import ssl
 import sys
-import urllib.request
+import urllib
+
+# import urllib.request
 from dataclasses import dataclass
 from glob import glob
 from io import StringIO
@@ -16,6 +20,7 @@ import addonHandler
 import config
 import globalVars
 import gui
+import requests
 import windowUtils
 import wx
 from configobj import ConfigObj
@@ -28,6 +33,7 @@ from gui.guiHelper import (
     ButtonHelper,
 )
 from logHandler import log
+from winBindings import crypt32
 
 from .file_utils import (
     ADDON_NAME,
@@ -340,7 +346,6 @@ def check_files():
             
     return True
 
-
 def parse_server_voices(resp_str):
     """Parses the pipe separated file list response from the server
 
@@ -374,6 +379,39 @@ def parse_server_voices(resp_str):
 
     return server_voices
 
+UPDATE_FETCH_TIMEOUT_S = 30
+def fetch_server_voices():
+    """Main function to fetch the voice list from the server. Sets the
+    server_error_event/network_error_event attribute in case of failure 
+    """
+    # First check if SSL Certificate error:
+    # (https://github.com/nvaccess/nvda/commit/079573dd88ab2701d43490c2af9e6f914df3f088)
+    try:
+        log.debug("Fetching update data from Hear2ReadNG server")
+        res = urllib.request.urlopen(H2RNG_VOICE_LIST_URL, timeout=UPDATE_FETCH_TIMEOUT_S)
+    except IOError as e:
+        if (
+            isinstance(e.reason, ssl.SSLCertVerificationError)
+            and e.reason.reason == "CERTIFICATE_VERIFY_FAILED"
+        ):
+            # #4803: Windows fetches trusted root certificates on demand.
+            # Python doesn't trigger this fetch (PythonIssue:20916), so try it ourselves
+            _updateWindowsRootCertificates(H2RNG_VOICE_LIST_URL)
+            # Retry the update check
+            log.debug(f"Retrying voice check from Hear2ReadNG server")
+            res = urllib.request.urlopen(url, timeout=UPDATE_FETCH_TIMEOUT_S)
+        else:
+            raise
+
+    if res.code != 200:
+        log.warn(f"Hear2ReadNG: Checking for voices failed with {res.code}.")
+
+    data = res.read().decode("utf-8")  # Ensure the response is decoded correctly
+    # if data is empty, we return None, because the server returns an empty response if there is no update.
+    if not data:
+        return None
+    server_voices = parse_server_voices(data)
+    return server_voices
 
 def populateVoices():
     """Checks and populates voice list based on the files present in the voice
@@ -629,24 +667,43 @@ class DownloadThread(Thread):
     def run(self):
         try:
             for download in self.download_queue:
-                with urllib.request.urlopen(download[1]) as response:
-                    total_size = response.length
+                # with urllib.request.urlopen(download[1]) as response:
+                #     total_size = response.length
+                #     with open(download[0], 'wb') as out_file:
+                #         downloaded = 0
+                #         while not self.cancel_event.is_set():
+                #             chunk = response.read(65536)
+                #             if not chunk:
+                #                 break
+                            
+                #             out_file.write(chunk)
+                #             downloaded += len(chunk)
+
+                #             percent = min(int(downloaded * 100 / total_size), 100)
+                #             wx.CallAfter(self.progress_callback, percent)
+
+                #         if self.cancel_event.is_set():
+                #             wx.CallAfter(self.cancel_callback)
+                #             return
+                
+                with requests.get(download[1], stream=True) as response:
+                    response.raise_for_status()
+                    total_size_header = response.headers.get('content-length')
+                    total_size = int(total_size_header) if total_size_header else None
                     with open(download[0], 'wb') as out_file:
                         downloaded = 0
-                        while not self.cancel_event.is_set():
-                            chunk = response.read(65536)
-                            if not chunk:
-                                break
-                            
-                            out_file.write(chunk)
-                            downloaded += len(chunk)
+                        for chunk in response.iter_content(chunk_size=65536):
+                            if self.cancel_event.is_set():
+                                wx.CallAfter(self.cancel_callback)
+                                return
 
-                            percent = min(int(downloaded * 100 / total_size), 100)
-                            wx.CallAfter(self.progress_callback, percent)
+                            if chunk:
+                                out_file.write(chunk)
+                                downloaded += len(chunk)
 
-                        if self.cancel_event.is_set():
-                            wx.CallAfter(self.cancel_callback)
-                            return
+                            if total_size:
+                                percent = min(int(downloaded * 100 / total_size), 100)
+                                wx.CallAfter(self.progress_callback, percent)
                         
             wx.CallAfter(self.complete_callback)
             
@@ -685,17 +742,6 @@ class _StartupInfoDialog(
             "Users can change to a different English TTS using the Hear2Read English voice "
             "settings option in the NVDA menu (NVDA+n), where they can also modify English voice "
             "parameters, like volume and rate."
-            # "Hear2Read uses Microsoft OneCore as the default English TTS. This helps improve "
-            # "navigation since OneCore has a quicker response.\n\n"
-
-            # "Users can change the English TTS using the Hear2Read English voice settings option in " 
-            # "the NVDA menu (NVDA+n), where they can also modify English voice parameters, like "
-            # "volume and rate. These parameters are separate for the English and the Indic "
-            # "voices.\n\n"
-
-            # "Alternatively, to change the English volume and rate, the user can switch the voice "
-            # "to English and make the changes. The English voice will retain these parameters after "
-            # "switching the voice back to Indic."
         )
 
         sText = sHelper.addItem(wx.StaticText(self, label=_infoText))
@@ -723,6 +769,7 @@ class _StartupInfoDialog(
         # Translators: The label of a button in a dialog
         okButton = bHelper.addButton(self, wx.ID_OK, label=_("&OK"))
         okButton.Bind(wx.EVT_BUTTON, self.onOkButton)
+        self.Bind(wx.EVT_CLOSE, self.onOkButton)
 
         mainSizer.Add(sHelper.sizer, border=BORDER_FOR_DIALOGS, flag=wx.ALL)
         self.Sizer = mainSizer
@@ -733,3 +780,91 @@ class _StartupInfoDialog(
         _h2r_config[SCT_General][ID_ShowStartupPopup] = not self.dontShowAgainCheckbox.GetValue()
         config.conf.save()
         self.EndModal(wx.ID_OK)
+        self.Destroy()
+
+class StartupInfoDialog(gui.message.MessageDialog):
+    def __init__(self, parent, title, message):
+        super().__init__(parent, title=title, message=message, dialogType=gui.message.DialogType.WARNING)
+        btn = gui.message.Button(id=gui.message.ReturnCode.YES, label=_("Don't Show Again"), callback=self.onDontShow)
+        self.addButton(btn)
+
+    # def _addButtons(self, buttonHelper):
+    #     btn = buttonHelper.addButton(self, label="Don't Show Again", name="dont_show")
+    #     self.addButton(btn, )
+    #     btn.Bind(wx.EVT_BUTTON, self.onDontShow)
+        # cancelBtn = buttonHelper.addButton(self, id=wx.ID_CANCEL, label=_("&OK"))
+        # cancelBtn.Bind(wx.EVT_BUTTON, lambda evt: None) #self.EndModal(wx.CANCEL))
+        # self.addOkButton()
+
+    def onDontShow(self, evt):
+        log.info("onDontShow")
+        _h2r_config[SCT_General][ID_ShowStartupPopup] = False
+        config.conf.save()
+        # self.EndModal(wx.OK)
+        # self.Destroy()
+
+
+def showStartupInfoDialog(parent=gui.mainFrame):
+    title = "Hear2ReadNG Update Info"
+    
+    _infoText = _(
+        # Translators: Info that is displayed when Hear2Read is started.
+        "Hear2Read uses Microsoft OneCore as the default English TTS. This helps improve "
+        "navigation since OneCore has a quicker response. English volume and rate can be "
+        "changed by switching the voice to English. These parameters are separate for the "
+        "English and the Indic voices. The English voice will retain these parameters after "
+        "switching the voice back to Indic\n\n"
+
+        "Users can change to a differe" \
+        "nt English TTS using the Hear2Read English voice "
+        "settings option in the NVDA menu (NVDA+n), where they can also modify English voice "
+        "parameters, like volume and rate."
+    )
+
+    return StartupInfoDialog(parent, title=title, message=_infoText).Show()
+
+
+def _updateWindowsRootCertificates(url):
+    """Pulled from NVDA's check. See 
+    https://github.com/nvaccess/nvda/commit/079573dd88ab2701d43490c2af9e6f914df3f088
+
+    @param url: URL to visit
+    @type url: str
+    """
+    log.debug("Updating Windows root certificates")
+    with requests.get(
+        # We must specify versionType so the server doesn't return a 404 error and
+        # thus cause an exception.
+        url,
+        timeout=UPDATE_FETCH_TIMEOUT_S,
+        # Use an unverified connection to avoid a certificate error.
+        verify=False,
+        stream=True,
+    ) as response:
+        # Get the server certificate.
+        cert = response.raw.connection.sock.getpeercert(True)
+    # Convert to a form usable by Windows.
+    certCont = crypt32.CertCreateCertificateContext(
+        0x00000001,  # X509_ASN_ENCODING
+        ctypes.cast(cert, ctypes.POINTER(ctypes.c_byte)),
+        len(cert),
+    )
+    # Ask Windows to build a certificate chain, thus triggering a root certificate update.
+    chainCont = ctypes.c_void_p()
+    crypt32.CertGetCertificateChain(
+        None,
+        certCont,
+        None,
+        None,
+        ctypes.byref(
+            crypt32.CERT_CHAIN_PARA(
+                cbSize=ctypes.sizeof(crypt32.CERT_CHAIN_PARA),
+                RequestedUsage=crypt32.CERT_USAGE_MATCH(),
+            ),
+        ),
+        0,
+        None,
+        ctypes.byref(chainCont),
+    )
+    crypt32.CertFreeCertificateChain(chainCont)
+    crypt32.CertFreeCertificateContext(certCont)

@@ -2,33 +2,36 @@
 # Copyright (C) 2013-2024, Hear2Read Project Contributors
 # See the file COPYING for more details.
 
-import glob
 import operator
 import os
 import zipfile
 from functools import partial
-from pathlib import Path
 from threading import Event, Thread
-from urllib import request
-from urllib.error import HTTPError
 
+# from urllib import request
+# from urllib.error import HTTPError
 import core
 import gui
+import requests
 import synthDriverHandler
+import winUser
 import wx
 from addonHandler import getCodeAddon
+
+# from gui.addonGui import promptUserForRestart
 from logHandler import log
+from requests.exceptions import HTTPError
+from systemUtils import ExecAndPump
 
 from synthDrivers._H2R_NG_Speak import H2RNG_DATA_DIR, H2RNG_VOICES_DIR
 
 from .h2rutils import (
-    H2RNG_VOICE_LIST_URL,
     H2RNG_VOICES_DOWNLOAD_HTTP,
     DownloadThread,
     Voice,
     check_files,
+    fetch_server_voices,
     onInstall,
-    parse_server_voices,
     populateVoices,
 )
 
@@ -38,10 +41,6 @@ DLL_FILE_NAME_PREFIX = "h2r-ng"
 DOWNLOAD_SUFFIX = ".download"
 
 
-# TODO remove copyright, add copyright
-# TODO rename the synth file to have no spaces(?)
-
-
 class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
     def __init__(self, parent=gui.mainFrame, title="Hear2Read Indic Voice Manager"):
         """Constructor for the main window of the voice download manager. 
@@ -49,6 +48,9 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         populates the list of voices to be displayed in the manager.
         """
         super().__init__(parent, title=title)
+        # Used to prompt restart post closing dialog when voices added/removed
+        self.session_voice_modified = False
+        self.Bind(wx.EVT_CLOSE, self.onClose)
 
         # Check the synth files and try one time install if installTasks failed
         if not check_files():
@@ -69,11 +71,13 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                     # Translators: title of a message telling the user that Hear2Read Indic was not installed correctly
                     _("Hear2Read Indic Error"),
                     wx.OK | wx.ICON_ERROR,)
-                self.Destroy()
+                self.EndModal(wx.ID_CANCEL)
+                # self.Destroy()
                 return
             
             # Inform user voices have been transferred and prompt NVDA restart
             if install_success:
+                self.session_voice_modified = True
                 retval = gui.messageBox(
                     # Translators: content of a message box
                     _("Successfully moved voices downloaded in previous"
@@ -85,8 +89,11 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                         wx.YES_NO | wx.ICON_WARNING,
                     )
                 if retval == wx.YES:
-                    core.restart()
-                    self.Destroy()
+                    # set_voice_install_restart(True)
+                    # core.restart()
+                    self.EndModal(wx.ID_SETUP)
+                    # self.Destroy()
+                    return
 
         # initialize attributes:
 
@@ -256,16 +263,200 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
 
         @param event: the event passed by the wx gui
         """
-        self.curr_index = event.GetIndex()
-        voice = self.display_voices[self.curr_index]
-        action = self.list_ctrl.GetItem(self.curr_index, 1).GetText()
+        index = event.GetIndex()
+        voice = self.display_voices[index]
+        action = self.list_ctrl.GetItem(index, 1).GetText()
 
         if action == "Download":
-            self.download_voice(voice)
+            self.startDownload(voice=voice, index=index)
         elif action == "Update":
-            self.update_voice(voice)
+            old_voice = self.update_langs.get(voice.lang_iso)
+            self.startUpdate(voice=voice, index=index, old_voice=old_voice)
         else:
-            self.remove_voice(voice)
+            self.remove_voice(voice, index)
+
+    def startDownload(self, voice, index, old_voice=None):
+        """Function to download or update voice. If updating, pass the old voice.
+
+        @param voice: the Voice object of the voice to be downloaded
+        @type voice: utils.Voice
+        @param index: index of list item of voice in manager
+        @type index: int
+        @param old_voice: the Voice object of the voice to be updated, defaults to None
+        @type old_voice: utils.Voice, optional
+        """
+        if not H2RNG_VOICES_DIR.is_dir():
+            try:
+                os.makedirs(H2RNG_VOICES_DIR)
+            except:
+                return gui.messageBox(
+                    # Translators: The message displayed if the folder to store the downloaded file can't be created.
+                    _("Unable to create voice files directory."),
+                    # Translators: The title displayed if the folder to store the downloaded file can't be created.
+                    _("Error"),
+                    wx.OK | wx.ICON_ERROR,
+                    self
+                )
+        # dest = path.join(self.storeUpdatesDir, updateInfo['name'])
+        if self.guiDownloadVoiceFiles(voice):
+            if self.guiInstallVoice(
+                    voice,
+                    old_voice
+                    ):
+                self.list_ctrl.SetItem(index, 1, "Remove")
+                self.session_voice_modified = True
+                
+                retval = gui.messageBox(
+                    # Translators: content of a message box
+                    _(
+                        f"Successfully downloaded {voice.display_name} voice.\n"
+                        "To use this voice, you need to restart NVDA.\n"
+                        "Do you want to restart NVDA now?"
+                    ),
+                    # Translators: title of a message box
+                    _("Voice installed"),
+                        wx.YES_NO | wx.ICON_WARNING,
+                    )
+                
+                if retval == wx.YES:
+                    # core.restart()
+                    self.EndModal(wx.ID_SETUP)
+                    # self.Destroy()
+                    # promptUserForRestart()
+            else:
+                # Translators: The message displayed when errors were found while trying to install voice.
+                gui.messageBox(
+                    _(f"Error installing {voice.display_name} voice"), 
+                    _("Error"), wx.OK|wx.ICON_ERROR, 
+                    self)
+        else:
+            # Translators: The message displayed when errors were found while trying to download voice.
+            gui.messageBox(
+                _(f"Error downloading {voice.display_name} voice"), 
+                _("Error"), 
+                wx.OK|wx.ICON_ERROR, 
+                self)
+
+    def startUpdate(self, voice, index, old_voice):
+        """Function to update voice. Wraps around startDownload with an additional check if voice to
+        be updated is in use by TTS.
+
+        @param voice: the Voice object of the voice to be downloaded
+        @type voice: utils.Voice
+        @param index: index of list item of voice in manager
+        @type index: int
+        @param old_voice: the Voice object of the voice to be updated
+        @type old_voice: utils.Voice
+        """
+        # first check that the current voice is not the one being removed
+        # TODO: this is not a breaking change, check if necessary
+        curr_synth = synthDriverHandler.getSynth()
+
+        if ("Hear2Read Indic" in curr_synth.name and 
+            (curr_synth.voice == old_voice.id)):
+            gui.messageBox(
+                # Translators: message in a message box
+                _("Cannot update currently active voice!\n"
+                  "Change synthesizer or voice to proceed"),
+                # Translators: title of a message box
+                _("Error"),
+                style=wx.ICON_ERROR
+            )
+            return
+        
+        self.startDownload(voice=voice, index=index, old_voice=old_voice)
+
+
+    def guiDownloadVoiceFiles(self, voice):
+        """Helper function taking care of the GUI for voice download.
+
+        @param voice: the Voice object of the voice to be downloaded
+        @type voice: utils.Voice
+        @return: Whether voice download was succesful or not
+        @rtype: bool
+        """
+        # list of tuples of files and respective download URLs
+        download_queue = []
+
+        # the main model file
+        file = f"{voice.id}.onnx"
+        download_url = f"{H2RNG_VOICES_DOWNLOAD_HTTP}{file}"
+        # log.info(f"download_voice on: {voice.id}, URL: {download_url}")
+        download_queue.append((H2RNG_VOICES_DIR / f"{file}{DOWNLOAD_SUFFIX}", 
+                               download_url))
+        
+        # the model config file
+        file_config = f"{file}.json"
+        download_url_config = f"{H2RNG_VOICES_DOWNLOAD_HTTP}{file_config}"
+        download_queue.append((H2RNG_VOICES_DIR / f"{file_config}{DOWNLOAD_SUFFIX}",  
+                               download_url_config))
+        
+        # the extras file, if present
+        if voice.extra:
+            file_extra = f"{file}.zip"
+            download_url_extra = f"{H2RNG_VOICES_DOWNLOAD_HTTP}{file_extra}"
+            download_queue.append((H2RNG_VOICES_DIR / f"{file_extra}{DOWNLOAD_SUFFIX}",  
+                                   download_url_extra))
+            
+        gui.mainFrame.prePopup()
+        progressDialog = wx.ProgressDialog(
+            "Downloading",
+            f"Downloading {voice.display_name}. Please wait...",
+            style=wx.PD_CAN_ABORT | wx.PD_ELAPSED_TIME | wx.PD_REMAINING_TIME | wx.PD_AUTO_HIDE,
+            parent=self)
+        # progressDialog.CentreOnScreen()
+        progressDialog.Raise()
+
+        def update(val):
+            nonlocal progressDialog
+            return not progressDialog.Update(val)[0]
+            
+        res = True
+        while True:
+            try:
+                ExecAndPump(self.download_files, download_queue, update)
+                break
+            except:
+                # Translators: a message dialog asking to retry or cancel when downloading a file.
+                message=_("Unable to download file. Perhaps there is no internet access or the server is not responding. Do you want to try again?")
+                # Translators: the title of a retry cancel dialog when downloading a file.
+                title=_("Error downloading")
+                if winUser.MessageBox(None,message,title,winUser.MB_RETRYCANCEL) != winUser.IDRETRY:
+                    res=False
+                    log.debugWarning(f"Error downloading voice: {voice.display_name}", exc_info=True)
+                    break
+        if not res:
+            try:
+                self.delete_voice_files(voice)
+            except:
+                pass
+        progressDialog.Destroy()
+        del progressDialog
+        gui.mainFrame.postPopup()
+        return res
+
+    def download_files(self, download_queue, fnUpdate = None):
+        """Handles file downloads.
+
+        @param voice: the Voice object of the voice to be downloaded
+        @type voice: utils.Voice
+        """
+        for download in download_queue:
+            with requests.get(download[1], stream=True) as response:
+                response.raise_for_status()
+                total_size_header = response.headers.get('content-length')
+                total_size = int(total_size_header) if total_size_header else None
+                with open(download[0], 'wb') as out_file:
+                    downloaded = 0
+                    for chunk in response.iter_content(chunk_size=65536):
+                        if chunk:
+                            out_file.write(chunk)
+                            downloaded += len(chunk)
+
+                        if total_size:
+                            percent = min(int(downloaded * 100 / total_size), 100)
+                            if fnUpdate and fnUpdate(percent):
+                                return
 
     def download_voice(self, voice):
         """Handles on click behaviour for voice download
@@ -311,7 +502,87 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
 
         self.download_thread.start()
 
-    def remove_voice(self, voice):
+    def guiInstallVoice(self, voice, old_voice=None):
+        """Helper function taking care of the GUI for voice install post download. Pass old_voice if
+        updating.
+
+        @param voice: the Voice object of the voice to be installed
+        @type voice: utils.Voice
+        @param old_voice: the Voice object of the voice to be updated, defaults to None
+        @type old_voice: utils.Voice, optional
+        @return: Whether voice install was succesful or not
+        @rtype: bool
+        """
+        gui.mainFrame.prePopup()
+        progressDialog = gui.IndeterminateProgressDialog(
+                self, 
+                "Installing",
+                f"Installing {voice.display_name} voice"
+                )
+        res = True
+        while True:
+            try:
+                ExecAndPump(self.install_voice, voice, old_voice)
+                break
+            except Exception as e:
+                log.info(f"Error installing voice {voice.display_name}", exc_info=True)
+                # Translators: a message dialog asking to retry or cancel when copying files.
+                message=_(f"Unable to install {voice.display_name} voice: {e}\n"
+                          "Please check if you have low disk space.")
+                # Translators: the title of a retry cancel dialog when copying files.
+                title=_("Error Copying")
+                if winUser.MessageBox(None,message,title,winUser.MB_RETRYCANCEL) != winUser.IDRETRY:
+                    res=False
+                    log.debugWarning(f"Error installing voice {voice.display_name}", exc_info=True)
+                    break
+        if not res:
+            try:
+                self.delete_voice_files(voice)
+            except:
+                pass
+        progressDialog.done()
+        del progressDialog
+        gui.mainFrame.postPopup()
+        return res
+    
+    def install_voice(self, voice, old_voice=None):
+        def remove_suffix_extract(voice):
+            """Does the file handling operations of renaming the files to remove
+            the suffix and extracting extras zip file, if present
+
+            @param voice: the Voice object of the voice being installed
+            @type voice: utils.Voice
+            """
+            voice_files = H2RNG_VOICES_DIR.glob(f"{voice.id}*")
+            for file in voice_files:
+                if file.is_file():
+                    # Check if the filename ends with suffix and remove
+                    if file.match(f"*{DOWNLOAD_SUFFIX}"):
+                        new_file = file.with_suffix("")
+                        os.rename(file, new_file)
+                        # extract extra files
+                        if new_file.match("*.zip"):
+                            with zipfile.ZipFile(new_file, 'r') as zipf:
+                                zipf.extractall(H2RNG_DATA_DIR)
+                            new_file.unlink()
+
+        def remove_old_voice(old_voice):
+            """Removes old voice files and the corresponding entry from the
+            voice updates dictionary maintained.
+
+            @param old_voice: the Voice object of the voice being removed
+            @type old_voice: utils.Voice
+            """
+            if H2RNG_VOICES_DIR / f"{old_voice.id}.onnx":
+                self.delete_voice_files(old_voice)
+            self.update_langs.pop(old_voice.lang_iso)
+
+        remove_suffix_extract(voice)
+        # Check if updating an older voice, remove old voice
+        if old_voice:
+            remove_old_voice(old_voice)
+
+    def remove_voice(self, voice, index):
         """Handler for on-click behaviour of removing voice
 
         @param voice: the Voice object of the voice to be removed
@@ -325,7 +596,8 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
             (curr_synth.voice == voice.id)):
             gui.messageBox(
                 # Translators: message in a message box
-                _("Cannot remove currently active voice!"),
+                _("Cannot remove currently active voice!\n"
+                  "Change synthesizer or voice to proceed"),
                 # Translators: title of a message box
                 _("Error"),
                 style=wx.ICON_ERROR
@@ -353,6 +625,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                     style=wx.ICON_WARNING
                 )
             else:
+                self.session_voice_modified = True
                 gui.messageBox(
                     # Translators: message in a message box
                     _("Voice removed successfully."),
@@ -360,7 +633,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                     _("Done"),
                     style=wx.ICON_INFORMATION
                 )
-            self.list_ctrl.SetItem(self.curr_index, 1, "Download")        
+            self.list_ctrl.SetItem(index, 1, "Download")        
 
     def update_voice(self, voice):
         """Helper function to handle on click behaviour for voice update. 
@@ -538,7 +811,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
 
     # TODO remove duplicate of utils.populateVoices
     @classmethod  
-    def get_installed_voices(self):
+    def get_installed_voices(cls):
         """Classmethod to get installed voices. Returns a dictionary of voices
         keyed by the ISO code of the language
 
@@ -590,11 +863,16 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
             server_error_event/network_error_event attribute in case of failure 
             """
             try:
-                with request.urlopen(H2RNG_VOICE_LIST_URL) as response:
-                    resp_str = response.read().decode('utf-8')
-                    self.server_voices = parse_server_voices(resp_str)
+                # with request.urlopen(H2RNG_VOICE_LIST_URL) as response:
+                #     resp_str = response.read().decode('utf-8')
+                #     self.server_voices = parse_server_voices(resp_str)
                     # log.info(f"parse_server_voices: {self.server_voices}")
                     # parse_server_voices(resp_str)
+                
+                # response = requests.get(H2RNG_VOICE_LIST_URL)
+                # response.raise_for_status()
+                # resp_str = response.text
+                self.server_voices = fetch_server_voices()
             except HTTPError as http_e:
                 self.server_error_event.set()
                 log.warn(f"Hear2Read http error: {http_e}")
@@ -650,3 +928,10 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                 self.display_voices.append(local_voice)
 
         self.display_voices.sort(key=operator.attrgetter("display_name"))
+
+    def onClose(self, event):
+        if self.session_voice_modified:
+            self.EndModal(wx.ID_SETUP)
+        else:
+            self.EndModal(wx.ID_OK)
+        # self.Destroy()
