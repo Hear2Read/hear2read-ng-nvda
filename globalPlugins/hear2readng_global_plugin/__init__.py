@@ -10,8 +10,9 @@
 # this is a slightly modified version of the corresponding file in the sonata
 # project (https://github.com/mush42/sonata-nvda)
 
+import ssl
+import urllib
 from threading import Thread
-from urllib import request
 
 import api
 import braille
@@ -23,12 +24,16 @@ import globalPluginHandler
 import gui
 import inputCore
 import queueHandler
+
+# from urllib import request
+import requests
 import scriptHandler
 import speech
 import textInfos
 import treeInterceptorHandler
 import ui
 import wx
+from gui.addonGui import promptUserForRestart
 from gui.message import DisplayableError
 from logHandler import log
 from scriptHandler import script
@@ -40,13 +45,12 @@ from globalPlugins.hear2readng_global_plugin.english_settings import (
 )
 from globalPlugins.hear2readng_global_plugin.file_utils import ADDON_NAME
 from globalPlugins.hear2readng_global_plugin.h2rutils import (
-    H2RNG_VOICE_LIST_URL,
     ID_ShowStartupPopup,
     SCT_General,
     _h2r_config,
-    _StartupInfoDialog,
-    parse_server_voices,
+    fetch_server_voices,
     postUpdateCheck,
+    showStartupInfoDialog,
 )
 from globalPlugins.hear2readng_global_plugin.voice_manager import (
     Hear2ReadNGVoiceManagerDialog,
@@ -151,6 +155,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     def on_manager_close(self, res):
         if not any(Hear2ReadNGVoiceManagerDialog.get_installed_voices()):
             self.on_no_voices(getSynth().name)
+        if(res == wx.ID_SETUP):
+            promptUserForRestart()
 
     def on_no_voices(self, curr_synth_name):
         
@@ -210,11 +216,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
         if _h2r_config[SCT_General][ID_ShowStartupPopup]:
             # log.info("_start_checks: showNewUserMessage")
-            startupdialog = _StartupInfoDialog()
-            gui.runScriptModalDialog(startupdialog,
-                                     callback=self._on_startupinfo_closed)
-        else:
-            self._perform_checks()
+            # startupdialog = _StartupInfoDialog()
+            # gui.runScriptModalDialog(startupdialog,
+            #                          callback=self._on_startupinfo_closed)
+            showStartupInfoDialog()
+        
+        self._perform_checks()
 
     def _on_startupinfo_closed(self, res):
         self._perform_checks()
@@ -236,7 +243,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
         if not any(Hear2ReadNGVoiceManagerDialog.get_installed_voices()):
             curr_synth_name = getSynth().name
-            # queueHandler.queueFunction(queueHandler.eventQueue, self.on_no_voices, curr_synth_name)
             self.on_no_voices(curr_synth_name)
 
     
@@ -254,23 +260,47 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             server_error_event/network_error_event attribute in case of failure 
             """
             try:
-                with request.urlopen(H2RNG_VOICE_LIST_URL) as response:
-                    resp_str = response.read().decode('utf-8')
-                    server_voices = parse_server_voices(resp_str)
-                    if server_voices:
-                        installed_voices = Hear2ReadNGVoiceManagerDialog.get_installed_voices()
-                        for iso, installed_voice in installed_voices.items():
-                            server_voice = server_voices.get(iso, None)
-                            if server_voice and server_voice.id != installed_voice.id:
-                                log.info(f"checking update on {installed_voice.id}, found: {server_voice.id}")
-                                self.on_voice_update(server_voice.display_name)
-                                return
-            except Exception as e:
-                log.warn(f"Hear2Read unable to access internet to check voice updates: {e}")
+                server_voices = fetch_server_voices()
+                if server_voices:
+                    installed_voices = Hear2ReadNGVoiceManagerDialog.get_installed_voices()
+                    for iso, installed_voice in installed_voices.items():
+                        server_voice = server_voices.get(iso, None)
+                        if server_voice and server_voice.id != installed_voice.id:
+                            log.info(f"checking update on {installed_voice.id}, found: {server_voice.id}")
+                            self.on_voice_update(server_voice.display_name)
+                            return
+            except:
+                log.debugWarning("Hear2ReadNG unable to check for voices online")
+
+            # try:
+            #     # with request.urlopen(H2RNG_VOICE_LIST_URL) as response:
+            #     #     resp_str = response.read().decode('utf-8')
+            #     #     server_voices = parse_server_voices(resp_str)
+            #     #     if server_voices:
+            #     #         installed_voices = Hear2ReadNGVoiceManagerDialog.get_installed_voices()
+            #     #         for iso, installed_voice in installed_voices.items():
+            #     #             server_voice = server_voices.get(iso, None)
+            #     #             if server_voice and server_voice.id != installed_voice.id:
+            #     #                 log.info(f"checking update on {installed_voice.id}, found: {server_voice.id}")
+            #     #                 self.on_voice_update(server_voice.display_name)
+            #     #                 return
+            #     response = requests.get(H2RNG_VOICE_LIST_URL)
+            #     resp_str = response.text
+            #     server_voices = parse_server_voices(resp_str)
+            #     if server_voices:
+            #         installed_voices = Hear2ReadNGVoiceManagerDialog.get_installed_voices()
+            #         for iso, installed_voice in installed_voices.items():
+            #             server_voice = server_voices.get(iso, None)
+            #             if server_voice and server_voice.id != installed_voice.id:
+            #                 log.info(f"checking update on {installed_voice.id}, found: {server_voice.id}")
+            #                 self.on_voice_update(server_voice.display_name)
+            #                 return
+            # except Exception as e:
+            #     log.warn(f"Hear2Read unable to access internet to check voice updates: {e}")
             # finally:
             #     fetch_complete_event.set()
 
-        Thread(target=fetch).start()
+        Thread(target=fetch, daemon=True).start()
 
     def terminate(self):
         try:
