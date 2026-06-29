@@ -14,24 +14,15 @@ from dataclasses import dataclass
 from glob import glob
 from io import StringIO
 from pathlib import Path
-from threading import Thread
 
 import addonHandler
 import config
 import globalVars
 import gui
 import requests
-import windowUtils
 import wx
 from configobj import ConfigObj
 from configobj.validate import Validator
-from gui.contextHelp import ContextHelpMixin
-from gui.guiHelper import (
-    BORDER_FOR_DIALOGS,
-    SPACE_BETWEEN_VERTICAL_DIALOG_ITEMS,
-    BoxSizerHelper,
-    ButtonHelper,
-)
 from logHandler import log
 from winBindings import crypt32
 
@@ -101,23 +92,6 @@ _dir = _dir.parent.parent
 OLD_H2RNG_DATA_DIR = os.path.join(os.environ['ALLUSERSPROFILE'], 
                                   "Hear2Read-ng")
 
-# try:
-#     _h2r_config = config.conf["hear2read"]
-# except KeyError:
-#     confspec = {
-#         "engSynth": "string(default='oneCore')",
-#         "engVoice": "string(default='')",
-#         "engVariant": "string(default='')",
-#         "engRate": "integer(default=50)",
-#         "engPitch": "integer(default=50)",
-#         "engVolume": "integer(default=100)",
-#         "engInflection": "integer(default=80)",
-#         "showStartupMsg": "boolean(default=True)"
-#     }
-    
-#     config.conf.spec["hear2read"] = confspec
-#     config.conf.validate(config.conf.validator)
-#     _h2r_config = config.conf["hear2read"]
 
 class H2RConfigManager():
     """Class to save Hear2Read addon related config parameters. Used as a
@@ -199,16 +173,6 @@ class H2RConfigManager():
                            "reset to factory defaults")
         if H2RNG_CONFIG_FILE.exists():
             self.addonConfig, errors = self.loadConfig(H2RNG_CONFIG_FILE)
-            # if self.addonConfig.errors:
-            #     log.warning(self.addonConfig.errors)
-            #     log.warning(
-            #         "Hear2Read Addon configuration file error: configuration reset to factory defaults")
-            #     os.remove(H2RNG_CONFIG_FILE)
-            #     self.warnConfigurationReset()
-            #     # reset configuration to factory defaults
-            #     self.addonConfig =\
-            #         self._versionToConfiguration[self._currentConfigVersion](None)
-            #     self.addonConfig.filename = H2RNG_CONFIG_FILE
         else:
             # no add-on configuration file found
             self.addonConfig, errors = self.loadConfig(None)
@@ -273,6 +237,7 @@ def copytree_compat(src, dst):
     copied from the answer https://stackoverflow.com/a/13814557, and has a 
     fairly basic functionality not accounting for symlinks, which is sufficient
     for our purposes
+    TODO: Remove, deprecated
 
     @param src: path to the source, to be copied from
     @type src: string
@@ -630,174 +595,33 @@ class Voice:
     extra: bool=False
 
 
-class DownloadThread(Thread):
-    """Subclass of Thread to run downloads in the background. It accepts a list 
-    of downloads to perform, a list of tuples (<file location>, <download url>)
-
-    @param Thread: the thread on which to run the download
-    @type Thread: threading.Thread
-    """
-    def __init__(self, download_queue, cancel_event, progress_callback,
-                 complete_callback, cancel_callback):
-        """_summary_
-
-        @param download_queue: list of tuples(pairs) of strings containing 
-        filename as first element and download URL as second 
-        @type download_queue: list(tuple(string, string))
-        @param cancel_event: threading event that is set if the cancel button is 
-        pressed
-        @type cancel_event: threading.Event
-        @param progress_callback: callback to update progress of download. 
-        Updates percent of file downloaded
-        @type progress_callback: function
-        @param complete_callback: called on successful completion of download
-        @type complete_callback: function
-        @param cancel_callback: called on interruption of download. Takes an 
-        optional error message if download is interrupted due to an Exception
-        @type cancel_callback: function(error_message=None)
-        """
-        super().__init__()
-        
-        self.download_queue = download_queue
-        self.cancel_event = cancel_event
-        self.progress_callback = progress_callback
-        self.complete_callback = complete_callback
-        self.cancel_callback = cancel_callback
-
-    def run(self):
-        try:
-            for download in self.download_queue:
-                # with urllib.request.urlopen(download[1]) as response:
-                #     total_size = response.length
-                #     with open(download[0], 'wb') as out_file:
-                #         downloaded = 0
-                #         while not self.cancel_event.is_set():
-                #             chunk = response.read(65536)
-                #             if not chunk:
-                #                 break
-                            
-                #             out_file.write(chunk)
-                #             downloaded += len(chunk)
-
-                #             percent = min(int(downloaded * 100 / total_size), 100)
-                #             wx.CallAfter(self.progress_callback, percent)
-
-                #         if self.cancel_event.is_set():
-                #             wx.CallAfter(self.cancel_callback)
-                #             return
-                
-                with requests.get(download[1], stream=True) as response:
-                    response.raise_for_status()
-                    total_size_header = response.headers.get('content-length')
-                    total_size = int(total_size_header) if total_size_header else None
-                    with open(download[0], 'wb') as out_file:
-                        downloaded = 0
-                        for chunk in response.iter_content(chunk_size=65536):
-                            if self.cancel_event.is_set():
-                                wx.CallAfter(self.cancel_callback)
-                                return
-
-                            if chunk:
-                                out_file.write(chunk)
-                                downloaded += len(chunk)
-
-                            if total_size:
-                                percent = min(int(downloaded * 100 / total_size), 100)
-                                wx.CallAfter(self.progress_callback, percent)
-                        
-            wx.CallAfter(self.complete_callback)
-            
-        except Exception as e:
-            wx.CallAfter(self.cancel_callback, error_message=str(e))
-
-    def cancel(self):
-        self.cancel_event.set()
-
-
-class _StartupInfoDialog(
-    ContextHelpMixin,
-    wx.Dialog  # wxPython does not seem to call base class initializer, put last in MRO
-):
-    """A dialog informing the user of the changes to Hear2Read regarding English
-    being spoken using a different synthesizer.
-    This code has been scavenged and modified from NVDA, from 
-    gui.addonStoreGui.messageDialogs._SafetyWarningDialog"""
-
-    helpId = "H2RStartup"
-
-    def __init__(self, parent=gui.mainFrame):
-        # Translators: The warning of a dialog
-        super().__init__(parent, title="Hear2Read Update Info")
-        mainSizer = wx.BoxSizer(wx.VERTICAL)
-        sHelper = BoxSizerHelper(self, orientation=wx.VERTICAL)
-
-        _infoText = _(
-            # Translators: Info that is displayed when Hear2Read is started.
-            "Hear2Read uses Microsoft OneCore as the default English TTS. This helps improve "
-            "navigation since OneCore has a quicker response. English volume and rate can be "
-            "changed by switching the voice to English. These parameters are separate for the "
-            "English and the Indic voices. The English voice will retain these parameters after "
-            "switching the voice back to Indic\n\n"
-
-            "Users can change to a different English TTS using the Hear2Read English voice "
-            "settings option in the NVDA menu (NVDA+n), where they can also modify English voice "
-            "parameters, like volume and rate."
-        )
-
-        sText = sHelper.addItem(wx.StaticText(self, label=_infoText))
-        # the wx.Window must be constructed before we can get the handle.
-        self.scaleFactor = windowUtils.getWindowScalingFactor(self.GetHandle())
-        sText.Wrap(
-            # 600 was fairly arbitrarily chosen by a visual user to look acceptable on their machine.
-            self.scaleFactor * 600,
-        )
-
-        sHelper.sizer.AddSpacer(SPACE_BETWEEN_VERTICAL_DIALOG_ITEMS)
-
-        self.dontShowAgainCheckbox = sHelper.addItem(
-            wx.CheckBox(
-                self,
-                label=_(
-                    # Translators: The label of a checkbox in the startup info dialog
-                    "&Don't show this message again"
-                ),
-            ),
-        )
-
-        bHelper = sHelper.addDialogDismissButtons(ButtonHelper(wx.HORIZONTAL))
-
-        # Translators: The label of a button in a dialog
-        okButton = bHelper.addButton(self, wx.ID_OK, label=_("&OK"))
-        okButton.Bind(wx.EVT_BUTTON, self.onOkButton)
-        self.Bind(wx.EVT_CLOSE, self.onOkButton)
-
-        mainSizer.Add(sHelper.sizer, border=BORDER_FOR_DIALOGS, flag=wx.ALL)
-        self.Sizer = mainSizer
-        mainSizer.Fit(self)
-        self.CentreOnScreen()
-
-    def onOkButton(self, evt: wx.CommandEvent):
-        _h2r_config[SCT_General][ID_ShowStartupPopup] = not self.dontShowAgainCheckbox.GetValue()
-        config.conf.save()
-        self.EndModal(wx.ID_OK)
-        self.Destroy()
-
 class StartupInfoDialog(gui.message.MessageDialog):
+    """A dialog informing the user of the changes to Hear2Read regarding English
+    being spoken using a different synthesizer. Has two buttons, one to just to close the
+    dialog, and another to let the user prevent showing the dialog again.
+
+    Subclass of NVDA's gui.message.MessageDialog"""
     def __init__(self, parent, title, message):
+        """Constructor for dialog box
+
+        @param parent: Parent window
+        @type parent: wx.Window
+        @param title: Title string
+        @type title: str
+        @param message: Message string
+        @type message: str
+        """
         super().__init__(parent, title=title, message=message, dialogType=gui.message.DialogType.WARNING)
         btn = gui.message.Button(id=gui.message.ReturnCode.YES, label=_("Don't Show Again"), callback=self.onDontShow)
         self.addButton(btn)
 
-    # def _addButtons(self, buttonHelper):
-    #     btn = buttonHelper.addButton(self, label="Don't Show Again", name="dont_show")
-    #     self.addButton(btn, )
-    #     btn.Bind(wx.EVT_BUTTON, self.onDontShow)
-        # cancelBtn = buttonHelper.addButton(self, id=wx.ID_CANCEL, label=_("&OK"))
-        # cancelBtn.Bind(wx.EVT_BUTTON, lambda evt: None) #self.EndModal(wx.CANCEL))
-        # self.addOkButton()
-
     def onDontShow(self, evt):
-        log.info("onDontShow")
+        """Button press behaviour for "Don't Show Again" button
+
+        @param evt: Button press event, unused
+        @type evt: wx.Event
+        """
+        # log.info("onDontShow")
         _h2r_config[SCT_General][ID_ShowStartupPopup] = False
         config.conf.save()
         # self.EndModal(wx.OK)
@@ -805,6 +629,13 @@ class StartupInfoDialog(gui.message.MessageDialog):
 
 
 def showStartupInfoDialog(parent=gui.mainFrame):
+    """Wrapper to instantiate and show the startup info dialog
+
+    @param parent: Parent window, defaults to gui.mainFrame
+    @type parent: wx.Window, optional
+    @return: return of wx.Dialog.Show()
+    @rtype: bool
+    """
     title = "Hear2ReadNG Update Info"
     
     _infoText = _(

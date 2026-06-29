@@ -10,8 +10,6 @@
 # this is a slightly modified version of the corresponding file in the sonata
 # project (https://github.com/mush42/sonata-nvda)
 
-import ssl
-import urllib
 from threading import Thread
 
 import api
@@ -26,7 +24,6 @@ import inputCore
 import queueHandler
 
 # from urllib import request
-import requests
 import scriptHandler
 import speech
 import textInfos
@@ -91,11 +88,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                                                     self._startup)
         core.postNvdaStartup.register(self._voice_checker)
 
-        # if ADDON_NAME not in curr_synth_name:
-        #     self._voice_checker = lambda: wx.CallLater(2000, 
-        #                                             self._perform_voice_check)
-        #     core.postNvdaStartup.register(self._voice_checker)
-
         self.itemHandle = gui.mainFrame.sysTrayIcon.menu.Insert(
             4,
             wx.ID_ANY,
@@ -111,7 +103,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         self.eng_settings_id = wx.Window.NewControlId()
 
         if ADDON_NAME in curr_synth_name:
-            # self.eng_settings_id = wx.Window.NewControlId()
             self.make_eng_settings_menu()
             self.eng_settings_active = True
         
@@ -121,7 +112,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         global curr_synth_name
         curr_synth_name = synth.name
         if ADDON_NAME in curr_synth_name:
-            # self.eng_settings_id = wx.Window.NewControlId()
             self.make_eng_settings_menu()
             self.eng_settings_active = True
             self._perform_voice_check()
@@ -216,9 +206,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
         if _h2r_config[SCT_General][ID_ShowStartupPopup]:
             # log.info("_start_checks: showNewUserMessage")
-            # startupdialog = _StartupInfoDialog()
-            # gui.runScriptModalDialog(startupdialog,
-            #                          callback=self._on_startupinfo_closed)
             showStartupInfoDialog()
         
         self._perform_checks()
@@ -251,7 +238,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
         class attribute server_voices, a list of Voice objects. The operation
         is done in a background thread while a BusyInfo is displayed.
         """
-        # fetch_complete_event = Event()
         if self.__voice_manager_shown:# or gui.isModalMessageBoxActive():
             return
 
@@ -272,34 +258,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
             except:
                 log.debugWarning("Hear2ReadNG unable to check for voices online")
 
-            # try:
-            #     # with request.urlopen(H2RNG_VOICE_LIST_URL) as response:
-            #     #     resp_str = response.read().decode('utf-8')
-            #     #     server_voices = parse_server_voices(resp_str)
-            #     #     if server_voices:
-            #     #         installed_voices = Hear2ReadNGVoiceManagerDialog.get_installed_voices()
-            #     #         for iso, installed_voice in installed_voices.items():
-            #     #             server_voice = server_voices.get(iso, None)
-            #     #             if server_voice and server_voice.id != installed_voice.id:
-            #     #                 log.info(f"checking update on {installed_voice.id}, found: {server_voice.id}")
-            #     #                 self.on_voice_update(server_voice.display_name)
-            #     #                 return
-            #     response = requests.get(H2RNG_VOICE_LIST_URL)
-            #     resp_str = response.text
-            #     server_voices = parse_server_voices(resp_str)
-            #     if server_voices:
-            #         installed_voices = Hear2ReadNGVoiceManagerDialog.get_installed_voices()
-            #         for iso, installed_voice in installed_voices.items():
-            #             server_voice = server_voices.get(iso, None)
-            #             if server_voice and server_voice.id != installed_voice.id:
-            #                 log.info(f"checking update on {installed_voice.id}, found: {server_voice.id}")
-            #                 self.on_voice_update(server_voice.display_name)
-            #                 return
-            # except Exception as e:
-            #     log.warn(f"Hear2Read unable to access internet to check voice updates: {e}")
-            # finally:
-            #     fetch_complete_event.set()
-
+        # TODO: move to NVDA execandpump?
         Thread(target=fetch, daemon=True).start()
 
     def terminate(self):

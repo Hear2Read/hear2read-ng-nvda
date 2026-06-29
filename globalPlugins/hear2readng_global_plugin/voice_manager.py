@@ -5,12 +5,8 @@
 import operator
 import os
 import zipfile
-from functools import partial
 from threading import Event, Thread
 
-# from urllib import request
-# from urllib.error import HTTPError
-import core
 import gui
 import requests
 import synthDriverHandler
@@ -27,7 +23,6 @@ from synthDrivers._H2R_NG_Speak import H2RNG_DATA_DIR, H2RNG_VOICES_DIR
 
 from .h2rutils import (
     H2RNG_VOICES_DOWNLOAD_HTTP,
-    DownloadThread,
     Voice,
     check_files,
     fetch_server_voices,
@@ -110,10 +105,6 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         self.network_error_event = Event()
         # event set on network error
         self.server_error_event = Event()
-        # thread to perform downloads on
-        self.download_thread = None
-        # progress dialog to show download progress
-        self.progress_dialog = None
 
         try:
             version = getCodeAddon().manifest.version
@@ -436,10 +427,12 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         return res
 
     def download_files(self, download_queue, fnUpdate = None):
-        """Handles file downloads.
+        """Handles file downloads. Takes a list of downloads to be done.
 
-        @param voice: the Voice object of the voice to be downloaded
-        @type voice: utils.Voice
+        @param download_queue: List of downloads. Each item is a pair of Destination path and URL
+        @type List
+        @param fnUpdate: Callback to update download progress
+        @type Callable[[int], bool]
         """
         for download in download_queue:
             with requests.get(download[1], stream=True) as response:
@@ -458,49 +451,6 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                             if fnUpdate and fnUpdate(percent):
                                 return
 
-    def download_voice(self, voice):
-        """Handles on click behaviour for voice download
-
-        @param voice: the Voice object of the voice to be downloaded
-        @type voice: utils.Voice
-        """
-        # list of tuples of files and respective download URLs
-        download_queue = []
-
-        # the main model file
-        file = f"{voice.id}.onnx"
-        download_url = f"{H2RNG_VOICES_DOWNLOAD_HTTP}{file}"
-        # log.info(f"download_voice on: {voice.id}, URL: {download_url}")
-        download_queue.append((H2RNG_VOICES_DIR / f"{file}{DOWNLOAD_SUFFIX}", 
-                               download_url))
-        
-        # the model config file
-        file_config = f"{file}.json"
-        download_url_config = f"{H2RNG_VOICES_DOWNLOAD_HTTP}{file_config}"
-        download_queue.append((H2RNG_VOICES_DIR / f"{file_config}{DOWNLOAD_SUFFIX}",  
-                               download_url_config))
-        
-        # the extras file, if present
-        if voice.extra:
-            file_extra = f"{file}.zip"
-            download_url_extra = f"{H2RNG_VOICES_DOWNLOAD_HTTP}{file_extra}"
-            download_queue.append((H2RNG_VOICES_DIR / f"{file_extra}{DOWNLOAD_SUFFIX}",  
-                                   download_url_extra))
-
-        # Show progress dialog
-        self.progress_dialog = wx.ProgressDialog("Downloading",
-                        f"Downloading {voice.display_name}. Please wait...",
-                        maximum=100, parent=self,
-                        style=wx.PD_CAN_ABORT | wx.PD_AUTO_HIDE)
-
-        # Start download thread
-        self.download_thread = DownloadThread(download_queue=download_queue,
-                    cancel_event = Event(),
-                    progress_callback=self.update_progress,
-                    complete_callback=lambda: self.on_download_complete(voice),
-                    cancel_callback=partial(self.on_download_cancel, voice))
-
-        self.download_thread.start()
 
     def guiInstallVoice(self, voice, old_voice=None):
         """Helper function taking care of the GUI for voice install post download. Pass old_voice if
@@ -546,6 +496,14 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         return res
     
     def install_voice(self, voice, old_voice=None):
+        """Finishes up post download tasks, removing temporary file extensions and extracting voice
+        extras
+
+        @param voice: Voice being installed
+        @type voice: utils.Voice
+        @param old_voice: previous version of the voice in case of update, defaults to None
+        @type old_voice: utils.Voice, optional
+        """
         def remove_suffix_extract(voice):
             """Does the file handling operations of renaming the files to remove
             the suffix and extracting extras zip file, if present
@@ -635,179 +593,6 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                 )
             self.list_ctrl.SetItem(index, 1, "Download")        
 
-    def update_voice(self, voice):
-        """Helper function to handle on click behaviour for voice update. 
-        Currently behaviour is identical to downloading the voice
-
-        @param voice: the Voice object of the voice to be updated
-        @type voice: utils.Voice
-        """
-        self.download_voice(voice)
-
-    def update_progress(self, percent):
-        """Callback function to update progress dialog with download progress.
-
-        @param percent: integer percent of file downloaded
-        @type percent: int
-        """
-        if self.progress_dialog:
-            keep_going, skip = self.progress_dialog.Update(percent)
-            if not keep_going:
-                self.download_thread.cancel()
-
-    def on_download_complete(self, voice):
-        """Callback function on completion of downloads. Removes old voices if 
-        present, renames voice files to remove the download suffix, and updates 
-        the UI. The file management tasks are done on a background thread.
-
-        @param voice: the Voice object of the voice downloaded
-        @type voice: utils.Voice
-        """
-        voice_install_event = Event()
-
-        if self.progress_dialog:
-            self.progress_dialog.Destroy()
-            self.progress_dialog = None
-
-        installing_dialog = wx.BusyInfo("Installing {}... Please wait ", 
-                                        parent=self)
-        wx.Yield()
-
-        def dismiss_installing_dialog():
-            nonlocal installing_dialog
-            installing_dialog = None
-
-        def post_install_tasks(voice):
-            """Handles UI changes after all install tasks are complete. 
-            Dismisses the BusyInfo dialog and updates the list item status.
-            Finally, prompts the user to restart NVDA to apply changes.
-
-            @param voice: the Voice object of the voice installed
-            @type voice: utils.Voice
-            """
-            # TODO the thread seems redundant, check
-            self.list_ctrl.SetItem(self.curr_index, 1, "Remove")
-
-            dismiss_installing_dialog()
-
-            gui.messageBox(_(f"{voice.display_name} installed successfully "),
-                        _("Download Complete"), 
-                        wx.OK | wx.ICON_INFORMATION)
-            
-            retval = gui.messageBox(
-                # Translators: content of a message box
-                _(
-                    f"Successfully downloaded voice  {voice.display_name}.\n"
-                    "To use this voice, you need to restart NVDA.\n"
-                    "Do you want to restart NVDA now?"
-                ),
-                # Translators: title of a message box
-                _("Voice installed"),
-                    wx.YES_NO | wx.ICON_WARNING,
-                )
-            
-            if retval == wx.YES:
-                core.restart()
-                self.Destroy()
-            
-        def remove_suffix_extract(voice):
-            """Does the file handling operations of renaming the files to remove
-            the suffix and extracting extras zip file, if present
-
-            @param voice: the Voice object of the voice being installed
-            @type voice: utils.Voice
-            """
-            voice_files = H2RNG_VOICES_DIR.glob(f"{voice.id}*")
-            for file in voice_files:
-                if file.is_file():
-                    # Check if the filename ends with suffix and remove
-                    if file.match(f"*{DOWNLOAD_SUFFIX}"):
-                        new_file = file.with_suffix("")
-                        os.rename(file, new_file)
-                        # extract extra files
-                        if new_file.match("*.zip"):
-                            with zipfile.ZipFile(new_file, 'r') as zipf:
-                                zipf.extractall(H2RNG_DATA_DIR)
-                            new_file.unlink()
-
-        def remove_old_voice(old_voice):
-            """Removes old voice files and the corresponding entry from the
-            voice updates dictionary maintained.
-
-            @param old_voice: the Voice object of the voice being removed
-            @type old_voice: utils.Voice
-            """
-            if H2RNG_VOICES_DIR / f"{old_voice.id}.onnx":
-                self.delete_voice_files(old_voice)
-            self.update_langs.pop(old_voice.lang_iso)
-
-        def voice_install_tasks(voice):
-            """Function performing the install tasks of renaming downloaded 
-            files, removing old voice files, and extracting the extras zipfile.
-            Finally, sets the voice_install_event, allowing for post install
-            tasks to be performed
-
-            @param voice: the Voice object of the voice being installed
-            @type voice: utils.Voice
-            """
-            try:
-                remove_suffix_extract(voice)
-                # Check if updating an older voice, remove old voice
-                old_voice = self.update_langs.get(voice.lang_iso)
-                if old_voice:
-                    remove_old_voice(old_voice)
-            except Exception as e:
-                wx.CallAfter(
-                lambda : gui.messageBox(
-                    _(f"Failed to install {voice.display_name}: {e}"
-                        "\nPlease check if you have low disk space and retry"),
-                    # Translators: The title of a dialog presented when an error occurs.
-                    _("Error"),
-                    wx.OK | wx.ICON_ERROR))
-            finally:
-                wx.CallAfter(lambda: post_install_tasks(voice))
-                voice_install_event.set()
-
-        # Start the install tasks on a background thread
-        Thread(target=lambda: voice_install_tasks(voice)).start()
-
-        # wait for install to complete
-        voice_install_event.wait()
-
-    def on_download_cancel(self, voice, error_message=None):
-        """Callback on the event the download is interrupted. In case the 
-        user interrupts the download, a default message is shown. In case of
-        download failure due to other exceptions, the exception message is 
-        shown additionally.
-
-        @param voice: the Voice object of the voice to be downloaded
-        @type voice: utils.Voice
-        @param error_message: the additional error message to be shown if the 
-        download was not cancelled by the user, defaults to None
-        @type error_message: string, optional
-        """
-        self.delete_voice_files(voice)
-
-        if self.progress_dialog:
-            self.progress_dialog.Destroy()
-            self.progress_dialog = None
-
-        if error_message:
-            gui.messageBox(
-                    _(f"Unable to download {voice.display_name} "
-                      "\nPlease check internet connection "),
-                    # Translators: The title of a dialog presented when an error occurs.
-                    _("Download Error"),
-                    wx.OK | wx.ICON_ERROR
-                )
-            # wx.MessageBox(error_message, "Error", wx.OK | wx.ICON_ERROR)
-        else:
-            gui.messageBox(
-                    _("Download was canceled "),
-                    # Translators: The title of a dialog presented when an error occurs.
-                    _("Download Canceled"),
-                    wx.OK | wx.ICON_WARNING
-                )
 
     # TODO remove duplicate of utils.populateVoices
     @classmethod  
@@ -863,16 +648,8 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
             server_error_event/network_error_event attribute in case of failure 
             """
             try:
-                # with request.urlopen(H2RNG_VOICE_LIST_URL) as response:
-                #     resp_str = response.read().decode('utf-8')
-                #     self.server_voices = parse_server_voices(resp_str)
-                    # log.info(f"parse_server_voices: {self.server_voices}")
-                    # parse_server_voices(resp_str)
-                
-                # response = requests.get(H2RNG_VOICE_LIST_URL)
-                # response.raise_for_status()
-                # resp_str = response.text
                 self.server_voices = fetch_server_voices()
+            # TODO: these are not going to be reached, remove?
             except HTTPError as http_e:
                 self.server_error_event.set()
                 log.warn(f"Hear2Read http error: {http_e}")
@@ -934,4 +711,3 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
             self.EndModal(wx.ID_SETUP)
         else:
             self.EndModal(wx.ID_OK)
-        # self.Destroy()
