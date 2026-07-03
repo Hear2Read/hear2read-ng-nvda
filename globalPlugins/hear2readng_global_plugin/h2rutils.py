@@ -636,10 +636,11 @@ def showStartupInfoDialog(parent=gui.mainFrame):
     @return: return of wx.Dialog.Show()
     @rtype: bool
     """
-    title = "Hear2ReadNG Update Info"
+    # Translators: Title of dialog showing info on startup.
+    title = _("Hear2ReadNG Update Info")
     
+    # Translators: Info that is displayed when Hear2Read is started.
     _infoText = _(
-        # Translators: Info that is displayed when Hear2Read is started.
         "Hear2Read uses Microsoft OneCore as the default English TTS. This helps improve "
         "navigation since OneCore has a quicker response. English volume and rate can be "
         "changed by switching the voice to English. These parameters are separate for the "
