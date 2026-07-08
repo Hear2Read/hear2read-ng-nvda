@@ -475,7 +475,7 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                 ExecAndPump(self.install_voice, voice, old_voice)
                 break
             except Exception as e:
-                log.info(f"Error installing voice {voice.display_name}", exc_info=True)
+                log.warn(f"Error installing voice {voice.display_name}", exc_info=True)
                 # Translators: a message dialog asking to retry or cancel when copying files.
                 message=_(f"Unable to install {voice.display_name} voice: {e}\n"
                           "Please check if you have low disk space.")

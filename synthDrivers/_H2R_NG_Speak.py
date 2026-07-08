@@ -128,7 +128,7 @@ def getCurrentVoice() -> str | None:
         return None
         
 def setCurrentVoice(voiceID: str):
-    log.info(f"H2R setCurrentVoice: {voiceID}")
+    # log.info(f"H2R setCurrentVoice: {voiceID}")
     global curr_voice
     curr_voice = voiceID
 
@@ -411,7 +411,7 @@ def set_player():
 
 
 def _setVoiceByIdentifier(voiceID):  
-    log.info(f"_setVoiceByIdentifier: {voiceID}")  
+    # log.info(f"_setVoiceByIdentifier: {voiceID}")  
     if voiceID:
         voice_attrs = voiceID.split("-")
     else:
@@ -455,7 +455,7 @@ def _setVoiceByIdentifier(voiceID):
 
 #TODO default voice
 def setVoiceByLanguage(lang):
-    log.info(f"_H2R_NG_Speak:setVoiceByLanguage: {lang}")
+    # log.info(f"_H2R_NG_Speak:setVoiceByLanguage: {lang}")
     
     lang = lang.split("_")[0]
     
@@ -465,7 +465,7 @@ def setVoiceByLanguage(lang):
         
     #Get all files in the Voices Directory
     pathName = H2RNG_VOICES_DIR
-    log.info(f"_H2R_NG_Speak:setVoiceByLanguage - looking in {H2RNG_VOICES_DIR}")
+    # log.info(f"_H2R_NG_Speak:setVoiceByLanguage - looking in {H2RNG_VOICES_DIR}")
 
     file_list = os.listdir(pathName)
     
@@ -478,7 +478,7 @@ def setVoiceByLanguage(lang):
             if file_lang == lang and (f"{file_name}.json") in file_list:
                 # matching language
                 
-                log.info(f"_H2R_NG_Speak:setVoiceByLanguage - found {file_lang} for lang {lang}")
+                # log.info(f"_H2R_NG_Speak:setVoiceByLanguage - found {file_lang} for lang {lang}")
 
                 hr = _setVoiceByIdentifier(parts[0])
                 setCurrentVoice(parts[0])
@@ -580,15 +580,15 @@ def set_eng_synth_voice(voice_id):
     if voice_id not in get_eng_synth_voicelist().keys():
         log.warn(f"English voice {voice_id} not found in synthesizer, skipping")
         return
-    log.info(f"set_eng_voice: {voice_id}")
+    # log.info(f"set_eng_voice: {voice_id}")
     if EngSynth:
         EngSynth._set_voice(voice_id)
 
-    log.info(f"voice changed to: {get_eng_synth_voice()}")
+    # log.info(f"voice changed to: {get_eng_synth_voice()}")
     if get_eng_synth_voice() != voice_id:
-        log.info("failed changing the voice. trying change_voice")
+        # log.info("failed changing the voice. trying change_voice")
         changeVoice(EngSynth, voice_id)
-        log.info(f"2nd attempt voice changed to: {get_eng_synth_voice()}")
+        # log.info(f"2nd attempt voice changed to: {get_eng_synth_voice()}")
 
     # _h2r_config[SCT_EngSynth][ID_EnglishSynthVoice] = EngSynth.voice
 
@@ -664,7 +664,7 @@ def get_eng_synth_voicelist() -> OrderedDict:
     if EngSynth:
         try:
             all_voices = EngSynth._get_availableVoices()
-        #    log.info(f"got all voices: {all_voices}")
+            # log.info(f"got all voices: {all_voices}")
             return  OrderedDict((id, voice_info)
                 for id, voice_info in all_voices.items()
                 if ((voice_info.language and voice_info.language.startswith("en")) 

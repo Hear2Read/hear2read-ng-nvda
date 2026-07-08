@@ -596,7 +596,7 @@ class SynthDriver(SynthDriver):
         if not self.__voices:
             self.__voices = populateVoices()
         
-        log.info(f"Populated voices: {[{voiceID, voiceName} for voiceID, voiceName in self.__voices.items()]}")
+        # log.info(f"Populated voices: {[{voiceID, voiceName} for voiceID, voiceName in self.__voices.items()]}")
 
         # return OrderedDict((voiceID,VoiceInfo(voiceID,voiceName,"en"))
         #         for voiceID, voiceName in self.__voices.items())
@@ -609,7 +609,7 @@ class SynthDriver(SynthDriver):
         return curr_voice if curr_voice else _H2R_NG_Speak.EN_VOICE_ALOK
 
     def _set_voice(self, identifier):
-        log.info(f"H2R _set_voice: {identifier}")
+        # log.info(f"H2R _set_voice: {identifier}")
 
         if len(self.__voices) < 2:
             _H2R_NG_Speak.setVoiceByLanguage("en")
@@ -682,7 +682,7 @@ class SynthDriver(SynthDriver):
             self._script_range = unicode_ranges[lang_name]
 
     def _onIndexReached(self, index):
-        log.info(f"_onIndexReached: {index}")
+        # log.info(f"_onIndexReached: {index}")
         # we use -ve indexes internally to track interleaved native-English text, NVDA shouldn't be
         # notified of these
         if index > 0:
@@ -695,20 +695,20 @@ class SynthDriver(SynthDriver):
         #     synthDoneSpeaking.notify(synth=self) 
 
     def _onDone(self):
-        log.info("_onDone")
+        # log.info("_onDone")
         if not self.subsequences:
             synthDoneSpeaking.notify(synth=self) 
         else:
             self._processSubSequences()
 
     def _receiveIndexNotification(self, synth, index):
-        log.info(f"received index reached: {index}, from: {synth.name}")
+        # log.info(f"received index reached: {index}, from: {synth.name}")
         if self.name != synth.name and index > 0:
             synthIndexReached.notify(synth=self, index=index)
             return
 
     def _receiveDoneNotification(self, synth):
-        log.info(f"received synth done: {synth.name}")
+        # log.info(f"received synth done: {synth.name}")
         if self.name != synth.name:
             if self.subsequences:
                 self._processSubSequences()
