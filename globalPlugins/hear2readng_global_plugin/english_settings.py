@@ -282,10 +282,11 @@ class SynthesizerSelectionDialog(SettingsDialog):
         newSynth=self.synthNames[self.synthList.GetSelection()]
         if not set_eng_synth(newSynth):
             # TODO ensure valid synth is set?
-            # Translators: This message is presented when
-            # NVDA is unable to load the selected
+            # Translators: This message is presented when NVDA is unable to load the selected
             # synthesizer.
-            gui.messageBox(_("Could not load the %s synthesizer.")%newSynth,_("Synthesizer Error"),wx.OK|wx.ICON_WARNING,self)
+            gui.messageBox(_("Could not load the %s synthesizer.")%newSynth,
+                           # Translators: Title of message box shown on synthesizer load error
+                           _("Synthesizer Error"),wx.OK|wx.ICON_WARNING,self)
             return
         # if audioDucking.isAudioDuckingSupported():
         #     index=self.duckingList.GetSelection()

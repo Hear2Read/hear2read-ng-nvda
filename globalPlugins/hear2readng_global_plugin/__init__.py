@@ -206,7 +206,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
         if _h2r_config[SCT_General][ID_ShowStartupPopup]:
             # log.info("_start_checks: showNewUserMessage")
-            showStartupInfoDialog()
+            wx.CallAfter(showStartupInfoDialog())
         
         self._perform_checks()
 
@@ -275,8 +275,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
     ############################################################################
     
     @script(
+        # Translators: Input help mode message for report current character under review cursor command.
         description=_(
-            # Translators: Input help mode message for report current character under review cursor command.
             "Reports the character of the current navigator object where the review cursor is situated. "
             "Pressing twice reports a description or example of that character. "
             "Pressing three times reports the numeric value of the character in decimal and hexadecimal",
@@ -316,8 +316,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
     
     @script(
+        # Translators: Input help mode message for report current word under review cursor command.
         description=_(
-            # Translators: Input help mode message for report current word under review cursor command.
             "Speaks the word of the current navigator object where the review cursor is situated. "
             "Pressing twice spells the word. "
             "Pressing three times spells the word using character descriptions",
@@ -356,8 +356,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                 speech.speakSpelling(info.text, useCharacterDescriptions=True)
 
     @script(
+        # Translators: Input help mode message for read current line under review cursor command.
         description=_(
-            # Translators: Input help mode message for read current line under review cursor command.
             "Reports the line of the current navigator object where the review cursor is situated. "
             "If this key is pressed twice, the current line will be spelled. "
             "Pressing three times will spell the line using character descriptions.",
@@ -395,8 +395,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                 speech.speakSpelling(info.text, useCharacterDescriptions=True)
 
     @script(
+        # Translators: Input help mode message for report current line command.
         description=_(
-            # Translators: Input help mode message for report current line command.
             "Reports the current line under the application cursor. "
             "Pressing this key twice will spell the current line. "
             "Pressing three times will spell the line using character descriptions.",
@@ -435,8 +435,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
                 speech.speakSpelling(info.text, useCharacterDescriptions=True)
         
     @script(
+        # Translators: Input help mode message for report current selection command.
         description=_(
-            # Translators: Input help mode message for report current selection command.
             "Announces the current selection in edit controls and documents. "
             "Pressing twice spells this information. "
             "Pressing three times spells it using character descriptions. "

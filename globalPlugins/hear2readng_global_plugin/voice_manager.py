@@ -217,20 +217,22 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
         # on the event of server error, warn the user and inform that only 
         # voices already installed are being shown
         if self.server_error_event.is_set():
+            # Translators: Message of dialog when an error occurs.
             gui.messageBox(_("Failed to connect to server " 
                             "\nPlease contact us for assistance at feedback@hear2read.org "
                              "\nWe will only display installed voices "),
-            # Translators: The title of a dialog presented when an error occurs.
+                            # Translators: The title of a dialog presented when an error occurs.
                             _("Network Error"),
                             wx.OK | wx.ICON_WARNING)
             
         # on the event of network error, warn the user and inform that only 
         # voices already installed are being shown
         elif self.network_error_event.is_set():
+            # Translators: Message of dialog when an error occurs.
             gui.messageBox(_("Failed to connect to the internet " 
                             "\nPlease check your internet connection "
                              "\nWe will only display installed voices "),
-            # Translators: The title of a dialog presented when an error occurs.
+                            # Translators: The title of a dialog presented when an error occurs.
                             _("Network Error"),
                             wx.OK | wx.ICON_WARNING)
 
@@ -315,16 +317,18 @@ class Hear2ReadNGVoiceManagerDialog(wx.Dialog):
                     # self.Destroy()
                     # promptUserForRestart()
             else:
-                # Translators: The message displayed when errors were found while trying to install voice.
                 gui.messageBox(
-                    _(f"Error installing {voice.display_name} voice"), 
+                # Translators: The message displayed when errors were found while trying to install voice.
+                    _(f"Error installing {voice.display_name} voice"),
+                # Translators: Title of error message box
                     _("Error"), wx.OK|wx.ICON_ERROR, 
                     self)
         else:
             # Translators: The message displayed when errors were found while trying to download voice.
             gui.messageBox(
-                _(f"Error downloading {voice.display_name} voice"), 
-                _("Error"), 
+                _(f"Error downloading {voice.display_name} voice"),
+                # Translators: Title of error message box
+                _("Error"),
                 wx.OK|wx.ICON_ERROR, 
                 self)
 
