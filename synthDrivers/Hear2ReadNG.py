@@ -545,6 +545,7 @@ class SynthDriver(SynthDriver):
         if (textmarked != ""):
             # params = _H2R_NG_Speak.SpeechParams(piperPhoneLen, amplitude, charMode)
             params = _H2R_NG_Speak.SpeechParams(piperPhoneLen**-1.0, 1.0, amplitude, charMode) # 2.0
+            # log.info(f"_speak_h2r: speaking: {textmarked}")
             _H2R_NG_Speak.speak(textmarked, params)
 
     def cancel(self):
