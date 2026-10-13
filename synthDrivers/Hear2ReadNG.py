@@ -65,6 +65,7 @@ checkedUpdate = False
 # TEXT_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 UNK_SCRIPT = "Unknown"
 
+# ranges of the supported languages
 unicode_ranges = {
     "devanagari": (0x0900, 0x097F),
     "bengali": (0x0980, 0x09FF),
@@ -105,8 +106,6 @@ class SynthDriver(SynthDriver):
 #        PhonemeCommand,
     }
     supportedNotifications = {synthIndexReached, synthDoneSpeaking}
-
-    __voices = dict()
 
     @classmethod
     def check(cls):
@@ -340,36 +339,47 @@ class SynthDriver(SynthDriver):
             self._processSubSequences()
 
     def _process_mixed_text(self, text, idxCmd):
+        """Processes mixed ASCII and Unicode text. Modifies the subsequences to contain only
+        alternating ASCII and Indian language text. Takes care of ASCII numbers and assigns it to
+        either English or Indian depending on context
+
+        @param text: Mixed text to be split
+        @type text: str
+        @param idxCmd: The IndexCommand associated with this block of text
+        @type idxCmd: IndexCommand
+        """
         # log.info(f"_process_mixed_text: {text}, {idxCmd}")
         split_texts = self.alpha_regex.split(text)
         # log.info(f"mixed texts: {split_texts}")
         split_texts_checked = []
-        split_texts_joined = []
 
         for txt in split_texts:
+            # Check if pure ASCII
             if txt.isascii():
                 split_texts_checked.append([True, txt])
             else:
                 split_unicode_texts = self._process_non_native_unicode(txt)
                 split_texts_checked.extend(split_unicode_texts)
 
+        # Merge consequent Indian or English chunks into one
+        split_texts_joined = []
         for isASCII, txt in split_texts_checked:
-            # isASCII = txt.isascii()
+            # First chunk in split_texts_checked is added without checks
             if not split_texts_joined:
                 split_texts_joined.append([isASCII, txt])
                 isPrevASCII = isASCII
+            # Subsequent chunks are added either merged with previous chunk if same type...
             elif (self.is_nontext(txt) or 
                   isPrevASCII == isASCII):
-                #   txt.isascii()==split_texts[-1].isascii()):
-                # if not split_texts[-1].isascii and split_texts_base[i+1].isascii:
-                #     continue
                 split_texts_joined[-1][1] += txt
+            # ...or added as a separate chunk if different from previous
             else:
                 split_texts_joined.append([isASCII, txt])
                 isPrevASCII = isASCII
         
         # log.info(f"mixed texts cleaned: {split_texts_joined}")
 
+        # The NVDA SpeechSequence subsequence to be added based on the text provided
         subSequence : SpeechSequence = []
         
         # self.negIndex = -2
@@ -392,17 +402,29 @@ class SynthDriver(SynthDriver):
         self.subsequences.append((isASCII, subSequence))
         
     def is_nontext(self, txt):
+        """Checks if provided str is ASCII, but not alphanumeric
+        TODO: Check if the function matches the description, and if it does, if there's a simpler way
+
+        @param txt: String to check
+        @type txt: str
+        @return: Whether the string satisfies the conditions 
+        @rtype: bool
+        """
         ret = txt.isascii() and not bool(re.search(r'[a-zA-Z0-9]', txt))
         return ret
 
     def _processSubSequences(self):
+        """Synthesizes the generated subsequences by sending to either our engine, or the English
+        engine, depending on the type of subsequence
+        """
         if not self.subsequences:
             log.warn("Hear2Read: No speech sequences to process!")
             return
         isASCII, subSequence = self.subsequences.pop(0)
         # log.info(f"_processSubSequences: isASCII: {isASCII}, {subSequence}")
 
-        # Play a short silence while switching from Indian language to English
+        # Play a short silence while switching from Indian language to English. This is to improve
+        # the comprehension of mixed text and avoid the outut sounding garbled
         if not self.first_subseq and isASCII:
             _H2R_NG_Speak.speak_silence(500)
 
@@ -416,55 +438,74 @@ class SynthDriver(SynthDriver):
             self._speak_h2r(subSequence)
 
     def _process_non_native_unicode(self, text):
+        """Further handles Unicode/mixed text from _process_mixed_text to deal with edge cases like
+        assigning ASCII numbers to the Indian or English chunk, dealing with non Indian Unicode etc
+
+        @param text: Mixed text to be processed
+        @type text: str
+        @return: List of pairs of bool and str, denoting if text chunk is ASCII, and the
+         corresponding text chunk respectively
+        @rtype: List[Pair[bool, str]]
+        """
         split_texts = []
+        # contains Unicode range of previous char
         prev_range = ()
+        # a running string containing the current text chunk being built up
         text_bit = ""
-        # has_curr_lang = False
+        # check if last char processed is a valid language
         is_prev_valid_lang = False
 
         # log.info(f"_process_non_native_unicode: {text}")
 
+        # Process text char by char. We follow a kind of greedy approach in splitting: we build and
+        # extend only native  language text, and add any non native chunks as English text directly.
+        # Then, in the second, merging pass, the chunks get consolidated
         for c in text:
             # log.info(f"checking: {c}")
+
+            # Check if current character belongs to the current language range, and extend text_bit
             if self._script_range[0] <= ord(c) <=self._script_range[1] or c in "।॥":
                 # log.info(f"adding: {c}")
                 text_bit += c
-                # has_curr_lang = True
+                # Only set this when encountering the first valid character
                 is_prev_valid_lang = True
                 continue
-
-            if c in string.whitespace or c in string.punctuation:
+            # Assign (Unicode) whitespace and punctiation to current bit if valid, else ignore
+            elif c in string.whitespace or c in string.punctuation:
                 if is_prev_valid_lang:
                     # log.info(f"adding punct: {c}")
                     text_bit += c
                 continue
-
-            if  c in string.digits or re.match("\\W", c):
+            # Assign digits and any non word characters
+            elif  c in string.digits or re.match("\\W", c):
+                # If text_chunk is valid, extend
                 if is_prev_valid_lang:
                     # log.info(f"extending unicode nonalpha: {c}")
                     text_bit += c
+                # Else, create new chunk
                 else:
                     # log.info(f"adding unicode nonalpha: {c}")
                     split_texts.append((True, c))
                 continue
-
             # send all non Indic, Unicode punct to English (em, en dashes etc)
-            if re.match("\\W", c):
+            # TODO: looks redundant
+            elif re.match("\\W", c):
                 # log.info(f"adding unicode nonalphanumeric: {c}")
                 split_texts.append((True, c))
                 continue
 
+            # We've not extended the chunk so far, we'll need the Unicode range of text_chunk for
+            # further processing
+
+            # Set the range if empty
             if not prev_range:
                 # log.info(f"first non native: {c}")
                 lang = unicodedata.name(c, UNK_SCRIPT).lower().split()[0]
                 prev_range = unicode_ranges.get(lang, (0x0900, 0x0DFF))
-                # if not prev_range:
-                #     prev_range = unicode_ranges["indic"]
                 if text_bit:
                     split_texts.append((False, text_bit))
                     text_bit = ""
                     is_prev_valid_lang = False
-
                 # log.info(f"adding first non native: {lang}")
                 # TODO add pitch change
                 split_texts.append((True, f"{lang} script"))
@@ -472,14 +513,20 @@ class SynthDriver(SynthDriver):
 
             # Checks for whether script is English or not
             if prev_range != INDIC_RANGE:
+                # Check if we're splitting or continuing at current char
                 is_prev_curr_lang = prev_range[0] <= ord(c) <= prev_range[1]
             else:
                 is_prev_curr_lang = not prev_range[0] <= ord(c) <= prev_range[1]
 
+            # No split, continue processing
             if is_prev_curr_lang:
                 # log.info("is_prev_curr_lang")
                 continue
 
+            # Else, split at character:
+
+            # Get the name of the current Unicode script from Unicode data
+            # TODO: not particularly helpful given edge cases, check using hardcoded ranges instead
             lang = unicodedata.name(c, UNK_SCRIPT).lower().split()[0]
 
             prev_range = unicode_ranges.get(lang, (0x0900, 0x0DFF))
@@ -491,20 +538,20 @@ class SynthDriver(SynthDriver):
                 
             split_texts.append((True, f"{lang} script"))
 
+        # Add leftover text
         if text_bit:
             split_texts.append((False, text_bit))
 
         # log.info(f"first run splits: {split_texts}")
 
+        # Merge consequent chunks of same type
         split_texts_joined = []
 
-        for isASCII, text in split_texts:
+        for isASCII, txt in split_texts:
             if split_texts_joined and split_texts_joined[-1][0] == isASCII:
-                split_texts_joined[-1][1] += text
-                # split_texts_joined[-1] = (isASCII, split_texts_joined[-1][1]
-                #                           + text)
+                split_texts_joined[-1][1] += txt
             else:
-                split_texts_joined.append([isASCII, text])
+                split_texts_joined.append([isASCII, txt])
 
         # log.info(f"_process_non_native_unicode: o/p: {split_texts_joined}")
 
@@ -544,7 +591,11 @@ class SynthDriver(SynthDriver):
         textmarked=u"".join(textSSML)           
         if (textmarked != ""):
             # params = _H2R_NG_Speak.SpeechParams(piperPhoneLen, amplitude, charMode)
-            params = _H2R_NG_Speak.SpeechParams(piperPhoneLen**-1.0, 1.0, amplitude, charMode) # 2.0
+            params = _H2R_NG_Speak.SpeechParams(piperPhoneLen**-1.0, 
+                                                1.0, 
+                                                amplitude, 
+                                                charMode,
+                                                ) # 2.0
             # log.info(f"_speak_h2r: speaking: {textmarked}")
             _H2R_NG_Speak.speak(textmarked, params)
 

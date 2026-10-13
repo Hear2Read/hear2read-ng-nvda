@@ -5,9 +5,24 @@
 # (NVDA+down arrow) for the whole text. Ensure everything is read, as well as no overlapping
 # speech occurs.
 
-ਨਗਰ ਕੌਂਸਲ ਚੋਣਾਂ work around CI ਨੇੜੇ ਆਉਂਦਿਆਂ ਕਸਬਾ ਮਜੀਠਾ  machines
-from the git install ਦੀ ਸਿਆਸਤ ਵਿੱਚ ਹਲਚਲ ਤੇਜ਼ ਹੋ ਗਈ ਹੈ। 
-ਇਸ ਦਰਮਿਆਨ ਇੱਕ ਵੱਡਾ ਸਿਆਸੀ machines
-the ਜਦੋਂ ਵਾਰਡ ਨੰਬਰ 10 ਨਾਲ ਸੰਬੰਧਿਤ ਕਈ ਪ੍ਰਮੁੱਖ install ਪਰਿਵਾਰਾਂ
+ਨਗਰ ਕੌਂਸਲ work around CI 3 ਨੇੜੇ ਮਜੀਠਾ machines
+from the ਦੀ ਸਿਆਸਤ ਵਿੱਚ ਹੈ। 
+ਇਸ ਸਿਆਸੀ machines
+the ਜਦੋਂ ਨੰਬਰ 10 ਨਾਲ ਪ੍ਰਮੁੱਖ install ਪਰਿਵਾਰਾਂ
+- ਜਦੋਂ ਵਾਰਡ 10 ਨਾਲ ਕਈ ਪ੍ਰਮੁੱਖ install—sequence ਪਰਿਵਾਰਾਂ
+ਜਦੋਂ - ਵਾਰਡ 10 ਨਾਲ-ਕਈ ਪ੍ਰਮੁੱਖ install - ਪਰਿਵਾਰਾਂ
+ਜਦੋਂ — ਵਾਰਡ 10 ਨਾਲ—ਕਈ ਪ੍ਰਮੁੱਖ un-install ਪਰਿਵਾਰਾਂ—
+— machines ਜਦੋਂ ਵਾਰਡ install
+— ਜਦੋਂ ਵਾਰਡ install
+— 10 ਜਦੋਂ
+- 10 ਜਦੋਂ
+- machines ਜਦੋਂ ਵਾਰਡ
+день ਵਾਰਡ
+ਵਾਰਡ день 
+день day
+day - день 10
+50 days
+day 3
+how far?
 ਨੇ ਕਾਂਗਰਸ ਪਾਰਟੀ ਨੂੰ ਛੱਡ ਕੇ ਆਮ 
 ਆਦਮੀ ਪਾਰਟੀ ਦਾ ਦਾਮਨ ਫੜ ਲਿਆ।

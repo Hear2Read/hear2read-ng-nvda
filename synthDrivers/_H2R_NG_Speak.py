@@ -18,6 +18,7 @@ from ctypes import (
     c_float,
     c_int,
     c_int16,
+    c_size_t,
     cdll,
     sizeof,
 )
@@ -97,7 +98,7 @@ def decodeH2RSpeakString(data: bytes) -> str:
     return data.decode('utf8')
     
 # callback function decorators
-t_H2RNG_audiocallback=CFUNCTYPE(c_int, POINTER(c_int16), c_int)
+t_H2RNG_audiocallback=CFUNCTYPE(c_int, POINTER(c_int16), c_size_t)
 t_H2RNG_indexcallback=CFUNCTYPE(c_int, c_int)
 t_H2RNG_donecallback=CFUNCTYPE(c_int)
 
@@ -115,7 +116,8 @@ class SpeechParams(Structure):
     _fields_ = [("speed", c_float),
                 ("pitch", c_float), 
                 ("volume", c_int), 
-                ("charMode", c_bool), ]
+                ("charMode", c_bool),
+                ("sampleRate", c_int),  ]
        
 def getCurrentVoice() -> str | None:
     
